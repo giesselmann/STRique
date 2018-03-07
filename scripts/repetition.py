@@ -1,6 +1,6 @@
 # \MODULE\---------------------------------------------------------------
 #
-#  CONTENTS      : Basic sam file parser
+#  CONTENTS      : Raw nanopore signal repeat detection pipeline
 #
 #  DESCRIPTION   : 
 #
@@ -387,7 +387,7 @@ def repeat_detection(config, record_IDs, output_file, counter):
                     continue
                 n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(raw_signal)
                 with open(output_file, 'a+') as fp:
-                    print('\t'.join([f5_record.ID, sam_record.reference,, sam_record.flags, str(n), 
+                    print('\t'.join([f5_record.ID, sam_record.reference, sam_record.flags, str(n), 
                                      str(score_prefix), str(score_suffix), str(log_p), str(ticks), str(offset)]), file=fp)
                 with counter.get_lock():
                     counter.value += 1
@@ -458,7 +458,7 @@ if __name__ == '__main__':
     # command line
     parser = argparse.ArgumentParser(description="STR Detection in raw nanopore data")
     parser.add_argument("f5", help="fast5 file directory") 
-    parser.add_argument("model", help"pore model")
+    parser.add_argument("model", help="pore model")
     parser.add_argument("config", help="job config file")
     parser.add_argument("out", help="output directory")
     parser.add_argument("--sam", help="alignment file in sam format")
@@ -502,6 +502,6 @@ if __name__ == '__main__':
     except RuntimeError:
         print('Could not join monitor thread')
     
-    
+    print("")
     
     

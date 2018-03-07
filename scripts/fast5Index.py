@@ -1,8 +1,8 @@
 # \MODULE\---------------------------------------------------------------
 #
-#  CONTENTS      : Basic sam file parser
+#  CONTENTS      : Fast5 directory index
 #
-#  DESCRIPTION   : 
+#  DESCRIPTION   : scan directory recursively for fast5 files 
 #
 #  RESTRICTIONS  : none
 #

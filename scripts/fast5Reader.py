@@ -1,6 +1,6 @@
 # \MODULE\---------------------------------------------------------------
 #
-#  CONTENTS      : Basic sam file parser
+#  CONTENTS      : Basic fast5 file reader
 #
 #  DESCRIPTION   : 
 #
