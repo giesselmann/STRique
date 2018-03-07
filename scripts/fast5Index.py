@@ -1,9 +1,25 @@
+# \MODULE\---------------------------------------------------------------
+#
+#  CONTENTS      : Basic sam file parser
+#
+#  DESCRIPTION   : 
+#
+#  RESTRICTIONS  : none
+#
+#  REQUIRES      : none
+#
+# -----------------------------------------------------------------------
+#  All rights reserved to Max Planck Institute for Molecular Genetics
+#  Berlin, Germany
+#  Written by Pay Giesselmann
+# -----------------------------------------------------------------------
+# public imports
 import os, sys, glob
 import re
 import shutil
 import json
 import tarfile
-import tqdm
+# private imports
 import fast5Reader
 
 
@@ -22,7 +38,7 @@ class fast5Index(object):
         else:
             f5files = [os.path.join(dirpath, f) for dirpath, _, files in os.walk(path2fast5) for f in files if f.endswith('.fast5')]
             tarFiles = [os.path.join(dirpath, f) for dirpath, _, files in os.walk(path2fast5) for f in files if f.endswith('.tar')]
-        for f in tqdm.tqdm(f5files, desc='Indexing fast5 files', unit='file'):
+        for f in f5files:
             try:
                 self.__records[self.__f5Reader.getRecordID(f)] = os.path.relpath(f, start=path2fast5).replace("\\", "/")
             except:
@@ -31,7 +47,7 @@ class fast5Index(object):
             print("Indexing", os.path.basename(f))
             try:
                 with tarfile.open(f) as tar:
-                    for member in tqdm.tqdm(tar.getmembers(), desc='Index archive', unit='file'):   
+                    for member in tar.getmembers():   
                         try:
                             if member.isfile():
                                 name = member.name

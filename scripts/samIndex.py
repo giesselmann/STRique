@@ -1,8 +1,21 @@
+# \MODULE\---------------------------------------------------------------
+#
+#  CONTENTS      : Basic sam file parser
+#
+#  DESCRIPTION   : 
+#
+#  RESTRICTIONS  : none
+#
+#  REQUIRES      : none
+#
+# -----------------------------------------------------------------------
+#  All rights reserved to Max Planck Institute for Molecular Genetics
+#  Berlin, Germany
+#  Written by Pay Giesselmann
+# -----------------------------------------------------------------------
 import os, json
 import string, re
-import tqdm
 import collections
-import numpy as np
 
 
 # constants
@@ -20,34 +33,8 @@ class samCols():
     QUAL = 10
 
 
-class samFlags():
-    multiSegment = 0x1
-    propAligned = 0x2
-    unmapped = 0x4
-    nextUnmapped = 0x8
-    reverseComplement = 0x10
-    nextReverseComplement = 0x20
-    firstSegment = 0x40
-    lastSegment = 0x80
-    secondaryAlignment = 0x100
-    notPassingFilter = 0x200
-    pcrOrDuplicate = 0x400
-    supplementary = 0x800
-
-
-samCigarOps = {"M":0,
-               "I":1,
-               "D":2,
-               "N":3,
-               "S":4,
-               "H":5,
-               "P":6,
-               "=":7,
-               "X":8}
-
-
 # data types
-class samDataElement():
+class samRecord():
     def __init__(self):
         self.name = "*"
         self.flags = 0
@@ -92,18 +79,16 @@ class samIndex(object):
         offset = 0
         with open(self.filename, 'r', encoding="ascii", errors="surrogateescape")as sam:
             size = os.path.getsize(self.filename)
-            with tqdm.tqdm(total=size, desc='Indexing sam file', unit_scale=True, unit='B') as pbar:
-                for line in sam:
-                    if line[0] != '@':      # header line
-                        cols = line.split()
-                        name = self.__simpleName__(cols[samCols.QNAME])
-                        flags = int(cols[samCols.FLAG])
-                        reference = cols[samCols.RNAME]
-                        if (flags & 0x900) == 0:
-                            self.records[name] = (offset, flags, reference)
-                    l = len(line)
-                    offset += l
-                    pbar.update(l)
+            for line in sam:
+                if line[0] != '@':      # header line
+                    cols = line.split()
+                    name = self.__simpleName__(cols[samCols.QNAME])
+                    flags = int(cols[samCols.FLAG])
+                    reference = cols[samCols.RNAME]
+                    if (flags & 0x900) == 0:
+                        self.records[name] = (offset, flags, reference)
+                l = len(line)
+                offset += l
 
     # load dictionary from disk
     def load(self, path2sam):
@@ -139,7 +124,7 @@ class samIndex(object):
                 sam.seek(offset)
                 line = sam.readline()
                 cols = line.split()
-                dataset = samDataElement()
+                dataset = samRecord()
                 dataset.name = self.__simpleName__(cols[samCols.QNAME])
                 dataset.flags = int(cols[samCols.FLAG])
                 dataset.reference = cols[samCols.RNAME]
@@ -157,7 +142,7 @@ class samIndex(object):
                 sam.seek(offset)
                 line = sam.readline()
                 cols = line.split()
-                dataset = samDataElement()
+                dataset = samRecord()
                 dataset.name = self.__simpleName__(cols[samCols.QNAME])
                 dataset.flags = int(cols[samCols.FLAG])
                 dataset.reference = cols[samCols.RNAME]

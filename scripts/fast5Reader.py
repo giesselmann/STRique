@@ -1,3 +1,18 @@
+# \MODULE\---------------------------------------------------------------
+#
+#  CONTENTS      : Basic sam file parser
+#
+#  DESCRIPTION   : 
+#
+#  RESTRICTIONS  : none
+#
+#  REQUIRES      : none
+#
+# -----------------------------------------------------------------------
+#  All rights reserved to Max Planck Institute for Molecular Genetics
+#  Berlin, Germany
+#  Written by Pay Giesselmann
+# -----------------------------------------------------------------------
 import string
 import h5py
 

@@ -1,11 +1,28 @@
+# \MODULE\---------------------------------------------------------------
+#
+#  CONTENTS      : Basic sam file parser
+#
+#  DESCRIPTION   : 
+#
+#  RESTRICTIONS  : none
+#
+#  REQUIRES      : none
+#
+# -----------------------------------------------------------------------
+#  All rights reserved to Max Planck Institute for Molecular Genetics
+#  Berlin, Germany
+#  Written by Pay Giesselmann
+# -----------------------------------------------------------------------
+# public imports
 import os, sys, json, argparse
+import Bio.Seq
+import signal
 import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
 import pomegranate as pg
-import Bio.Seq
-import signal
 from multiprocessing import Pool, Process, Event, Value
+# private imports
 import fast5Index
 import samIndex
 import pyseqan
@@ -382,17 +399,14 @@ def repeat_detection(config, record_IDs, output_file, counter):
                     n1, score_prefix1, score_suffix1, log_p1, ticks1, offset1 = model.detect(raw_signal)
                     score0 = score_prefix0 + score_suffix0
                     score1 = score_prefix1 + score_suffix1
-                    if score0 > score1:
-                        n = n0; score_prefix = score_prefix0; score_suffix = score_suffix0; log_p = log_p0
-                        ticks = ticks0; offset = offset0
-                        flag = 0
-                    else:
-                        n = n1; score_prefix = score_prefix1; score_suffix = score_suffix1; log_p = log_p1
-                        ticks = ticks1; offset = offset1
-                        flag = 16
-                    with open(output_file, 'a+') as fp:
-                        print('\t'.join([f5_record.ID, key, str(flag), str(n), 
-                                         str(score_prefix), str(score_suffix), str(log_p), str(ticks), str(offset)]), file=fp) 
+                    if score0 > score1 and ticks0 > 0:
+                        with open(output_file, 'a+') as fp:
+                            print('\t'.join([f5_record.ID, key, str(0), str(n0), 
+                                         str(score_prefix0), str(score_suffix0), str(log_p0), str(ticks0), str(offset0)]), file=fp) 
+                    elif score1 > score0 and ticks1 > 0:
+                        with open(output_file, 'a+') as fp:
+                            print('\t'.join([f5_record.ID, key, str(16), str(n1), 
+                                         str(score_prefix1), str(score_suffix1), str(log_p1), str(ticks1), str(offset1)]), file=fp) 
                 with counter.get_lock():
                     counter.value += 1       
 
