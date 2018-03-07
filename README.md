@@ -3,7 +3,7 @@ repetitION is a nanopore raw signal repeat detection pipeline
 ## Dependencies
 **Python**
 
-	Python 3.x
+	Python 3.5 or higher
 	pomegranate
 	biopython
 	numpy, scipy
@@ -11,7 +11,7 @@ repetitION is a nanopore raw signal repeat detection pipeline
 		
 **C++**
 	
-	gcc > 5 (C++14 support)
+	g++ > 5 (C++14 support)
 	SeqAn2 (downloaded by install script)
 	Pybind11 (downloaded by install script)
 
@@ -20,7 +20,7 @@ In order to download, build and install repetitION , execute the following comma
 
     git clone https://github.com/giesselmann/repetitION
     cd repetitION
-	python setup.py install
+	pip install .
 
 ## Usage
 	python repetition.py [--sam SAM] [--ID ID] [--t T] f5 model config out
