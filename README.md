@@ -18,7 +18,7 @@ repetitION is a nanopore raw signal repeat detection pipeline
 ## Installation
 In order to download, build and install repetitION , execute the following commands:
 
-    git clone https://github.com/giesselmann/repetitION
+    git clone --recursive https://github.com/giesselmann/repetitION
     cd repetitION
 	pip install .
 
