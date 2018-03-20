@@ -21,10 +21,11 @@ import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
 import pomegranate as pg
+from skimage.morphology import opening, closing, rectangle
 from multiprocessing import Pool, Process, Event, Value
+
 # private imports
 import fast5Index
-import samIndex
 import pyseqan
 
 
@@ -63,6 +64,25 @@ class pore_model():
         return np.repeat(level_means, samples)
 
 
+# parse bed file
+class bed_parser():
+    def __init__(self, bedFile):
+        self.records = {}
+        with open(bedFile, 'r') as fp:
+            for line in fp:
+                if line:
+                    cols = line.strip().split()
+                    if len(cols) >= 6:
+                        chr, start, stop, name, val, strand = cols[:6]
+                        self.records[name] = (chr, int(start), int(stop), strand)
+        
+    def __getitem__(self, key): 
+        if key in self.records:
+            return self.records[key]
+        else:
+            return None
+        
+        
 # profile HMM base class
 class profileHMM(pg.HiddenMarkovModel):         
     def __init__(self, sequence, 
@@ -293,7 +313,7 @@ class repeatDetection(object):
         if not suffix2:
             suffix2 = suffix
         self.score_min = 200
-        self.samples = 8
+        self.samples = 10
         self.sim_prefix = self.pm.generate_signal(prefix, samples=self.samples)
         self.sim_suffix = self.pm.generate_signal(suffix, samples=self.samples)
         self.sim_prefix2 = self.pm.generate_signal(prefix2, samples=self.samples)
@@ -310,8 +330,13 @@ class repeatDetection(object):
         return self.flanked_model.count_repeats(segment)
 
     def detect(self, signal):
-        nrm_signal = self.pm.normalize2model(signal, clip=True)
-        nrm_signal = sp.medfilt(nrm_signal, kernel_size=3)
+        nrm_signal = sp.medfilt(signal, kernel_size=3)
+        nrm_signal = (nrm_signal - np.median(nrm_signal)) / np.std(nrm_signal)
+        nrm_signal = np.clip(nrm_signal * 42 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
+        flt = rectangle(1, 6)
+        nrm_signal = opening(nrm_signal, flt)
+        nrm_signal = closing(nrm_signal, flt)
+        nrm_signal = self.pm.normalize2model(nrm_signal[0].astype(np.dtype('float')), clip=True)
         score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2)
         score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2)
         n = 0; p = 0        
@@ -330,7 +355,7 @@ def repeat_detection(config, record_IDs, output_file, counter):
     try:
         # load config
         fast5_dir=config['fast5_dir']
-        alignment_file=config['align_file']
+        bed_file=config['bed_file']
         output_file=os.path.join(config['out_dir'], output_file)
         model_file=config['model_file']
         repeat=config['repeat']
@@ -342,9 +367,9 @@ def repeat_detection(config, record_IDs, output_file, counter):
         assert(isinstance(repeat, dict))
         assert(isinstance(prefix, dict))
         assert(isinstance(suffix, dict))
-        if alignment_file:
-            sam = samIndex.samIndex()
-            sam.load(alignment_file)
+        bed = None
+        if bed_file:
+            bed = bed_parser(bed_file)
         f5 = fast5Index.fast5Index()
         f5.load(fast5_dir)
         pm = pore_model(model_file)
@@ -373,21 +398,22 @@ def repeat_detection(config, record_IDs, output_file, counter):
             if f5_record is None:
                 continue
             raw_signal = f5_record.raw    
-            if alignment_file:
-                sam_record = sam.getShortRecord(record_ID)
-                if not sam_record and not (sam_record.flags == 0 or sam_record.flags == 16):
+            if bed:
+                bed_record = bed[record_ID]
+                if not bed_record:
                     continue
-                if not sam_record.reference in detection:
+                if not bed_record[0] in detection:
                     continue
-                if sam_record.flags == 0:
-                    model = detection[sam_record.reference][0]
-                elif sam_record.flags == 16:
-                    model = detection[sam_record.reference][1]
                 else:
-                    continue
+                    if bed_record[3] == '+':
+                        model = detection[bed_record[0]][0]
+                    elif bed_record[3] == '-':
+                        model = detection[bed_record[0]][1]
+                    else:
+                        continue
                 n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(raw_signal)
                 with open(output_file, 'a+') as fp:
-                    print('\t'.join([f5_record.ID, sam_record.reference, sam_record.flags, str(n), 
+                    print('\t'.join([f5_record.ID, bed_record[0], bed_record[3], str(n), 
                                      str(score_prefix), str(score_suffix), str(log_p), str(ticks), str(offset)]), file=fp)
                 with counter.get_lock():
                     counter.value += 1
@@ -401,11 +427,11 @@ def repeat_detection(config, record_IDs, output_file, counter):
                     score1 = score_prefix1 + score_suffix1
                     if score0 > score1 and ticks0 > 0:
                         with open(output_file, 'a+') as fp:
-                            print('\t'.join([f5_record.ID, key, str(0), str(n0), 
+                            print('\t'.join([f5_record.ID, key, '+', str(n0), 
                                          str(score_prefix0), str(score_suffix0), str(log_p0), str(ticks0), str(offset0)]), file=fp) 
                     elif score1 > score0 and ticks1 > 0:
                         with open(output_file, 'a+') as fp:
-                            print('\t'.join([f5_record.ID, key, str(16), str(n1), 
+                            print('\t'.join([f5_record.ID, key, '-', str(n1), 
                                          str(score_prefix1), str(score_suffix1), str(log_p1), str(ticks1), str(offset1)]), file=fp) 
                 with counter.get_lock():
                     counter.value += 1       
@@ -415,14 +441,17 @@ def repeat_detection(config, record_IDs, output_file, counter):
 
             
 # parse config.json            
-def parse_config(f5_dir, model_file, config_file, sam_file, out_dir):
+def parse_config(f5_dir, model_file, config_file, bed_file, out_dir):
     with open(config_file) as fp:
         ld_conf = json.load(fp)
     config = {}
     try:
         config['model_file'] = model_file
         config['fast5_dir'] = f5_dir
-        config['align_file'] = sam_file
+        if os.path.isfile(bed_file):
+            config['bed_file'] = bed_file
+        else:
+            config['bed_file'] = None
         config['out_dir'] = out_dir
         config['repeat'] = ld_conf['repeat']
         config['prefix'] = ld_conf['prefix']
@@ -461,22 +490,15 @@ if __name__ == '__main__':
     parser.add_argument("model", help="pore model")
     parser.add_argument("config", help="job config file")
     parser.add_argument("out", help="output directory")
-    parser.add_argument("--sam", help="alignment file in sam format")
-    parser.add_argument("--ID", help="Read ID filter, one ID per line")
+    parser.add_argument("--bed", help="alignment information in BED-6 format")
     parser.add_argument("--t", type=int, default=1, help="Number of processes to use in parallel")
     args = parser.parse_args()
     # load config
-    config = parse_config(args.f5, args.model, args.config, args.sam, args.out)
-    # index/load reads and alignment
-    if args.sam:
-        sam = samIndex.samIndex()
-        sam.loadOrAnalyze(config['align_file'])
+    config = parse_config(args.f5, args.model, args.config, args.bed, args.out)
+    # index/load reads
     f5 = fast5Index.fast5Index()
     f5.loadOrAnalyze(config['fast5_dir'], recursive=True)
     records = np.array(f5.getRecordNames())
-    if args.ID:
-        ids = set(np.genfromtxt(args.ID, dtype=None, encoding='UTF-8'))
-        records = np.array([id for id in records if id in ids])
     # split in chunks for multi-processing
     record_chunks = np.array_split(records, args.t)
     counter = Value('i', 0)
