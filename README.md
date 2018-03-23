@@ -23,7 +23,7 @@ In order to download, build and install repetitION , execute the following comma
 	pip install .
 
 ## Usage
-	python repetition.py [--sam SAM] [--ID ID] [--t T] f5 model config out
+	python repetition.py [-h] [--bed BED] [--t T] f5 model config out
 
 	positional arguments:
 	  f5          fast5 file directory
@@ -32,8 +32,7 @@ In order to download, build and install repetitION , execute the following comma
 	  out         output directory
 
 	optional arguments:
-	  --sam SAM   alignment file in sam format
-	  --ID ID     Read ID filter, one ID per line
+	  --bed SAM   alignment file in bed format
 	  --t T       Number of processes to use in parallel
 	  
 ## Test
@@ -44,4 +43,4 @@ Test the pipeline with the following commands in the cloned repository:
 A File *0.tsv* with similar content should have been created:
 
 	ID	ref	flag	count	score_prefix	score_suffix	log_p	ticks	offset
-	ce47b364-ed6e-4409-808a-1041c0b5aac2	chr9	16	147	4713.84716796875	4765.23779296875	-28627.333236486844	40978	1635
+	ce47b364-ed6e-4409-808a-1041c0b5aac2	chr9	-	148	4690.2021484375	4738.76953125	-26745.348046750227	40978	1635
