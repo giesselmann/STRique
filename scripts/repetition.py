@@ -186,13 +186,20 @@ class repeatHMM(pg.HiddenMarkovModel):
         super().__init__()
         self.repeat = repeat
         self.model_file = model_file
+        # self.transition_probs = {'skip': .999,   # 99
+                                 # 'leave_repeat': .0002,
+                                 # 'loop': .95,
+                                 # 'move': .042,
+                                 # 'insert': .006,
+                                 # 'loop_insert' : .30,
+                                 # 'delete': .002}
         self.transition_probs = {'skip': .999,   # 99
-                                 'leave_repeat': .0002,
-                                 'loop': .95,
-                                 'move': .042,
-                                 'insert': .006,
-                                 'loop_insert' : .30,
-                                 'delete': .002}
+                                 'leave_repeat': .000002,
+                                 'loop': .90,
+                                 'move': .070,
+                                 'insert': .026,
+                                 'loop_insert' : .90,
+                                 'delete': .022}
         for key, value in transition_probs.items():
             self.transition_probs[key] = value
         self.state_prefix = state_prefix
@@ -265,9 +272,9 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
         # expand primer sequences and get profile HMMs
         prefix = self.prefix + self.repeat[:-1]
         suffix = self.repeat + self.suffix  
-        self.prefix_model = profileHMM(prefix, self.model_file, self.transition_probs, state_prefix='prefix', std_scale=1.0)
-        self.suffix_model = profileHMM(suffix, self.model_file, self.transition_probs, state_prefix='suffix', std_scale=1.0)
-        self.repeat_model = repeatHMM(self.repeat, self.model_file, self.transition_probs, state_prefix='repeat', std_scale=1.0)
+        self.prefix_model = profileHMM(prefix, self.model_file, self.transition_probs, state_prefix='prefix', std_scale=1.2)
+        self.suffix_model = profileHMM(suffix, self.model_file, self.transition_probs, state_prefix='suffix', std_scale=1.8)
+        self.repeat_model = repeatHMM(self.repeat, self.model_file, self.transition_probs, state_prefix='repeat', std_scale=1.2)
         # add sub-modules, flanking and skip states
         self.add_model(self.prefix_model)
         self.add_model(self.repeat_model)
@@ -312,8 +319,8 @@ class repeatDetection(object):
             prefix2 = prefix
         if not suffix2:
             suffix2 = suffix
-        self.score_min = 200
-        self.samples = 10
+        self.score_min = len(prefix2) * 15
+        self.samples = 8
         self.sim_prefix = self.pm.generate_signal(prefix, samples=self.samples)
         self.sim_suffix = self.pm.generate_signal(suffix, samples=self.samples)
         self.sim_prefix2 = self.pm.generate_signal(prefix2, samples=self.samples)
@@ -330,13 +337,13 @@ class repeatDetection(object):
         return self.flanked_model.count_repeats(segment)
 
     def detect(self, signal):
-        nrm_signal = sp.medfilt(signal, kernel_size=3)
-        nrm_signal = (nrm_signal - np.median(nrm_signal)) / np.std(nrm_signal)
-        nrm_signal = np.clip(nrm_signal * 42 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
-        flt = rectangle(1, 6)
-        nrm_signal = opening(nrm_signal, flt)
-        nrm_signal = closing(nrm_signal, flt)
-        nrm_signal = self.pm.normalize2model(nrm_signal[0].astype(np.dtype('float')), clip=True)
+        nrm_signal = sp.medfilt(signal, kernel_size=3) 
+        # nrm_signal = (nrm_signal - np.median(nrm_signal)) / np.std(nrm_signal)
+        # nrm_signal = np.clip(nrm_signal * 42 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
+        # flt = rectangle(1, 4)
+        # nrm_signal = opening(nrm_signal, flt)
+        # nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
+        nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), clip=True)
         score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2)
         score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2)
         n = 0; p = 0        
@@ -412,6 +419,8 @@ def repeat_detection(config, record_IDs, output_file, counter):
                     else:
                         continue
                 n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(raw_signal)
+                if n < 3:
+                    continue
                 with open(output_file, 'a+') as fp:
                     print('\t'.join([f5_record.ID, bed_record[0], bed_record[3], str(n), 
                                      str(score_prefix), str(score_suffix), str(log_p), str(ticks), str(offset)]), file=fp)
@@ -426,10 +435,14 @@ def repeat_detection(config, record_IDs, output_file, counter):
                     score0 = score_prefix0 + score_suffix0
                     score1 = score_prefix1 + score_suffix1
                     if score0 > score1 and ticks0 > 0:
+                        if n0 < 3:
+                            continue
                         with open(output_file, 'a+') as fp:
                             print('\t'.join([f5_record.ID, key, '+', str(n0), 
                                          str(score_prefix0), str(score_suffix0), str(log_p0), str(ticks0), str(offset0)]), file=fp) 
                     elif score1 > score0 and ticks1 > 0:
+                        if n1 < 3:
+                            continue
                         with open(output_file, 'a+') as fp:
                             print('\t'.join([f5_record.ID, key, '-', str(n1), 
                                          str(score_prefix1), str(score_suffix1), str(log_p1), str(ticks1), str(offset1)]), file=fp) 
