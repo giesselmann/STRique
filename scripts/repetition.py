@@ -461,7 +461,7 @@ def parse_config(f5_dir, model_file, config_file, bed_file, out_dir):
     try:
         config['model_file'] = model_file
         config['fast5_dir'] = f5_dir
-        if os.path.isfile(bed_file):
+        if bed_file and os.path.isfile(bed_file):
             config['bed_file'] = bed_file
         else:
             config['bed_file'] = None
