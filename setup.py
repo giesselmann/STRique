@@ -72,7 +72,7 @@ class CMakeBuild(build_ext):
         subprocess.check_call(['cmake', '--build', '.'] + build_args, cwd=self.build_temp)
 
 setup(
-    name='repetitION',
+    name='STRique',
     version='0.1.0',
     author='Pay Giesselmann',
     author_email='giesselmann@molgen.mpg.de',

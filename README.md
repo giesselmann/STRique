@@ -1,5 +1,5 @@
-# repetitION
-repetitION is a nanopore raw signal repeat detection pipeline
+# STRique
+STRique is a nanopore raw signal repeat detection pipeline
 ## Dependencies
 **Python**
 
@@ -16,14 +16,14 @@ repetitION is a nanopore raw signal repeat detection pipeline
 	Pybind11 (downloaded by install script)
 
 ## Installation
-In order to download, build and install repetitION , execute the following commands:
+In order to download, build and install STRique , execute the following commands:
 
-    git clone --recursive https://github.com/giesselmann/repetitION
-    cd repetitION
+    git clone --recursive https://github.com/giesselmann/STRique
+    cd STRique
 	pip install .
 
 ## Usage
-	python repetition.py [-h] [--bed BED] [--t T] f5 model config out
+	python scripts/STRique.py [-h] [--bed BED] [--t T] f5 model config out
 
 	positional arguments:
 	  f5          fast5 file directory
@@ -38,7 +38,7 @@ In order to download, build and install repetitION , execute the following comma
 ## Test
 Test the pipeline with the following commands in the cloned repository:
 
-	python scripts/repetition.py data models/template_median68pA6mer.model configs/c9orf72.json ./
+	python scripts/STRique.py data models/template_median68pA6mer.model configs/c9orf72.json ./
 
 A File *0.tsv* with similar content should have been created:
 
