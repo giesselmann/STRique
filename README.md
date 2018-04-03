@@ -32,7 +32,7 @@ In order to download, build and install STRique , execute the following commands
 	  out         output directory
 
 	optional arguments:
-	  --bed SAM   alignment file in bed format
+	  --bed BED   alignment file in bed format
 	  --t T       Number of processes to use in parallel
 	  
 ## Test
