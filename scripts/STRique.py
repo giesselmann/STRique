@@ -22,13 +22,24 @@ import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
 import pomegranate as pg
-#from skimage.morphology import opening, closing, rectangle
+from skimage.morphology import opening, closing, rectangle
+import matplotlib.pyplot as plt
 from multiprocessing import Pool, Process, Event, Value, Queue
 
 
 # private imports
 import fast5Index
 import pyseqan
+
+
+def sliding_window(a, n=3, mode='same'):
+    if mode == 'mean':
+        a = np.append(a, (n-1) * [np.mean(a)])
+    else:
+        a = np.append(a, (n-1) * [a[-1]])
+    shape = a.shape[:-1] + (a.shape[-1] - n + 1, n)
+    strides = a.strides + (a.strides[-1],)
+    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
 
 
 # basic normalization and simulation
@@ -51,14 +62,32 @@ class pore_model():
         self.model_max = max_state[0] + 6 * max_state[1]
         self.model_dict = model_dict
 
-    def normalize2model(self, signal, clip=True):
-        rawMedian = np.median(signal)
-        rawMAD = np.mean(np.absolute(np.subtract(signal, rawMedian)))
-        signal = np.divide(np.subtract(signal, np.median(signal)), rawMAD)
-        signal = np.add(np.multiply(signal, self.model_MAD), self.model_median)
+    def normalize2model(self, signal, clip=True, mask=True):
+        if mask:
+            diff_signal = np.abs(np.diff([np.median(x) for x in sliding_window(signal, n=100)] + [np.median(signal)]))
+            q = np.percentile(diff_signal, 98)
+            diff_mask = np.array([1 if x < q else 0 for x in diff_signal], dtype=np.dtype('uint8'))
+            diff_mask = diff_mask.reshape((1, len(diff_mask)))
+            flt = rectangle(1, 500)
+            diff_mask = opening(diff_mask, flt)
+            diff_mask = closing(diff_mask, flt)[0].astype(np.bool)
+            rawMedian = np.median(signal[~diff_mask])
+            rawMAD = np.mean(np.absolute(np.subtract(signal, rawMedian)))
+            # f, ax = plt.subplots(3, sharex=True)
+            # ax[0].plot(signal, 'b-')
+            # ax[0].axhline(rawMedian, color='r')
+            # ax[0].axhline(np.median(signal), color='g')
+            # ax[1].plot(~diff_mask, 'k-')
+            # ax[2].plot(diff_signal, 'k-')
+            # plt.show()
+        else:
+            rawMedian = np.median(signal)
+            rawMAD = np.mean(np.absolute(np.subtract(signal, rawMedian)))
+        nrm_signal = np.divide(np.subtract(signal, rawMedian), rawMAD)
+        nrm_signal = np.add(np.multiply(nrm_signal, self.model_MAD), self.model_median)
         if clip == True:
-            np.clip(signal, self.model_min + .5, self.model_max - .5, out=signal)
-        return signal
+            np.clip(nrm_signal, self.model_min + .5, self.model_max - .5, out=nrm_signal)
+        return nrm_signal
 
     def generate_signal(self, sequence, samples=10):
         signal = []
@@ -88,7 +117,7 @@ class bed_parser():
 # profile HMM base class
 class profileHMM(pg.HiddenMarkovModel):         
     def __init__(self, sequence, 
-                 model_file, transition_probs={}, state_prefix='', no_silent=False, std_scale=1.2):
+                 model_file, transition_probs={}, state_prefix='', no_silent=False, std_scale=1.0):
         super().__init__()
         self.pore_model = pore_model(model_file)
         self.sequence = sequence
@@ -184,7 +213,7 @@ class profileHMM(pg.HiddenMarkovModel):
 
 # repeat count profile HMM
 class repeatHMM(pg.HiddenMarkovModel):
-    def __init__(self, repeat, model_file, transition_probs={}, state_prefix='', std_scale=1.2):
+    def __init__(self, repeat, model_file, transition_probs={}, state_prefix='', std_scale=1.0):
         super().__init__()
         self.repeat = repeat
         self.model_file = model_file
@@ -312,10 +341,10 @@ class repeatDetection(object):
                  repeat, prefix, suffix,
                  prefix2=None, suffix2=None):
         self.algn = pyseqan.align_raw()
-        self.algn.dist_offset = 8.0
-        self.algn.gap_open = -2.0           # -16.0
-        self.algn.gap_extension = -8.0     # -4.0
-        self.algn.dist_min = -16.0
+        # self.algn.dist_offset = 8.0
+        # self.algn.gap_open = -2.0           # -16.0
+        # self.algn.gap_extension = -8.0     # -4.0
+        # self.algn.dist_min = -16.0
         self.pm = pore_model(model_file)
         if not prefix2:
             prefix2 = prefix
@@ -348,9 +377,16 @@ class repeatDetection(object):
         nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), clip=True)
         score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2)
         score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2)
-        n = 0; p = 0        
-        # if prefix_end < suffix_begin and score_prefix > self.score_min and score_suffix > self.score_min:
-            # n, p = self.detect_short(nrm_signal[prefix_begin:suffix_end])
+        # f, ax = plt.subplots(1)
+        # ax.plot(nrm_signal, 'k-')
+        # ax.plot(np.arange(len(self.sim_prefix2)) + prefix_begin, self.sim_prefix2, 'b-')
+        # ax.plot(np.arange(len(self.sim_suffix2)) + suffix_begin, self.sim_suffix2, 'b-')
+        # ax.axvline(prefix_begin, color='r')
+        # ax.axvline(prefix_end, color='r')
+        # ax.axvline(suffix_begin, color='b')
+        # ax.axvline(suffix_end, color='b')
+        # plt.show()
+        n = 0; p = 0
         if prefix_end < suffix_begin:
             sp2, hmm_begin, _ = self.detect_range(nrm_signal[prefix_begin:suffix_end], self.sim_prefix)
             ss2, _, hmm_end = self.detect_range(nrm_signal[prefix_begin:suffix_end], self.sim_suffix)
