@@ -17,12 +17,14 @@
 import os, sys, json, argparse
 import Bio.Seq
 import signal
+import queue
 import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
 import pomegranate as pg
-from skimage.morphology import opening, closing, rectangle
-from multiprocessing import Pool, Process, Event, Value
+#from skimage.morphology import opening, closing, rectangle
+from multiprocessing import Pool, Process, Event, Value, Queue
+
 
 # private imports
 import fast5Index
@@ -358,12 +360,11 @@ class repeatDetection(object):
 
 
 # main repeat detection worker
-def repeat_detection(config, record_IDs, output_file, counter):
+def process_detection(config, record_IDs, output_queue, counter):
     try:
         # load config
         fast5_dir=config['fast5_dir']
         bed_file=config['bed_file']
-        output_file=os.path.join(config['out_dir'], output_file)
         model_file=config['model_file']
         repeat=config['repeat']
         prefix=config['prefix']
@@ -396,15 +397,15 @@ def repeat_detection(config, record_IDs, output_file, counter):
                                                prefix2=Bio.Seq.reverse_complement(suffix2[key]),
                                                suffix2=Bio.Seq.reverse_complement(prefix2[key]))
                                )
-        # write header line
-        with open(output_file, 'w') as fp:
-            print('\t'.join(['ID', 'ref', 'flag', 'count', 'score_prefix', 'score_suffix', 'log_p', 'ticks', 'offset']), file=fp)
+
         # analyze each read
         for record_ID in record_IDs:
             f5_record = f5.getRecord(record_ID)
             if f5_record is None:
                 continue
             raw_signal = f5_record.raw    
+            with counter.get_lock():
+                    counter.value += 1
             if bed:
                 bed_record = bed[record_ID]
                 if not bed_record:
@@ -421,11 +422,8 @@ def repeat_detection(config, record_IDs, output_file, counter):
                 n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(raw_signal)
                 if n < 3:
                     continue
-                with open(output_file, 'a+') as fp:
-                    print('\t'.join([f5_record.ID, bed_record[0], bed_record[3], str(n), 
-                                     str(score_prefix), str(score_suffix), str(log_p), str(ticks), str(offset)]), file=fp)
-                with counter.get_lock():
-                    counter.value += 1
+                output_queue.put('\t'.join([f5_record.ID, bed_record[0], bed_record[3], str(n), 
+                                     str(score_prefix), str(score_suffix), str(log_p), str(ticks), str(offset)]))
             else:
                 for key, value in repeat.items():
                     model = detection[key][0]
@@ -437,24 +435,20 @@ def repeat_detection(config, record_IDs, output_file, counter):
                     if score0 > score1 and ticks0 > 0:
                         if n0 < 3:
                             continue
-                        with open(output_file, 'a+') as fp:
-                            print('\t'.join([f5_record.ID, key, '+', str(n0), 
-                                         str(score_prefix0), str(score_suffix0), str(log_p0), str(ticks0), str(offset0)]), file=fp) 
+                        output_queue.put('\t'.join([f5_record.ID, key, '+', str(n0), 
+                                         str(score_prefix0), str(score_suffix0), str(log_p0), str(ticks0), str(offset0)]))
                     elif score1 > score0 and ticks1 > 0:
                         if n1 < 3:
                             continue
-                        with open(output_file, 'a+') as fp:
-                            print('\t'.join([f5_record.ID, key, '-', str(n1), 
-                                         str(score_prefix1), str(score_suffix1), str(log_p1), str(ticks1), str(offset1)]), file=fp) 
-                with counter.get_lock():
-                    counter.value += 1       
+                        output_queue.put('\t'.join([f5_record.ID, key, '-', str(n1), 
+                                         str(score_prefix1), str(score_suffix1), str(log_p1), str(ticks1), str(offset1)])) 
 
     except KeyboardInterrupt:
         return
 
             
 # parse config.json            
-def parse_config(f5_dir, model_file, config_file, bed_file, out_dir):
+def parse_config(f5_dir, model_file, config_file, bed_file):
     with open(config_file) as fp:
         ld_conf = json.load(fp)
     config = {}
@@ -465,7 +459,6 @@ def parse_config(f5_dir, model_file, config_file, bed_file, out_dir):
             config['bed_file'] = bed_file
         else:
             config['bed_file'] = None
-        config['out_dir'] = out_dir
         config['repeat'] = ld_conf['repeat']
         config['prefix'] = ld_conf['prefix']
         config['suffix'] = ld_conf['suffix']
@@ -484,16 +477,24 @@ def parse_config(f5_dir, model_file, config_file, bed_file, out_dir):
         
  
 # print progess on command line
-def process_monitor(counter, max_count, stop_event):
+def process_output(counter, return_values, output_file, max_count, stop_event):
     import time
-    try:
-        while not stop_event.is_set():
-            time.sleep(1)
-            print("\rProcessed ", counter.value, 'of ', (max_count), end=" ")
-    except KeyboardInterrupt:
-        return
-    except:
-        print('Unknown Exception in Montior Process')
+    # write header line
+    with open(output_file, 'w') as fp:
+        print('\t'.join(['ID', 'ref', 'flag', 'count', 'score_prefix', 'score_suffix', 'log_p', 'ticks', 'offset']), file=fp)
+        # read result queue until stop event is set
+        try:
+            while not stop_event.is_set():
+                try:
+                    record = return_values.get(True, 1)
+                    print(record, file=fp)
+                except queue.Empty:
+                    pass
+                print("\rProcessed ", counter.value, 'of ', (max_count), end=" ")
+        except KeyboardInterrupt:
+            return
+        except Exception as e:
+            print('Exception in I/O Process: ', e)
         
         
 if __name__ == '__main__':
@@ -502,12 +503,12 @@ if __name__ == '__main__':
     parser.add_argument("f5", help="fast5 file directory") 
     parser.add_argument("model", help="pore model")
     parser.add_argument("config", help="job config file")
-    parser.add_argument("out", help="output directory")
+    parser.add_argument("out", help="output file name")
     parser.add_argument("--bed", help="alignment information in BED-6 format")
     parser.add_argument("--t", type=int, default=1, help="Number of processes to use in parallel")
     args = parser.parse_args()
     # load config
-    config = parse_config(args.f5, args.model, args.config, args.bed, args.out)
+    config = parse_config(args.f5, args.model, args.config, args.bed)
     # index/load reads
     f5 = fast5Index.fast5Index()
     f5.loadOrAnalyze(config['fast5_dir'], recursive=True)
@@ -515,22 +516,23 @@ if __name__ == '__main__':
     # split in chunks for multi-processing
     record_chunks = np.array_split(records, args.t)
     counter = Value('i', 0)
+    return_values = Queue()
     stop_event = Event()
-    monitor = Process(target=process_monitor, args=(counter, len(records), stop_event))
+    monitor = Process(target=process_output, args=(counter, return_values, args.out, len(records), stop_event))
     monitor.start()
     worker = []
     # fork into multiple worker processes
     try:
         if len(record_chunks) > 1:
             for i, chunk in enumerate(record_chunks[1:]):
-                worker.append(Process(target=repeat_detection, args=(config, chunk, str(i) + '.tsv', counter)))
+                worker.append(Process(target=process_detection, args=(config, chunk, return_values, counter)))
             for w in worker:
                w.start()
-        repeat_detection(config, record_chunks[0], '0.tsv', counter)
+        process_detection(config, record_chunks[0], return_values, counter)
         for w in worker:
            w.join()
     except KeyboardInterrupt:
-        print("Interrupt by user")
+        pass
     stop_event.set()
     try:
         monitor.join()

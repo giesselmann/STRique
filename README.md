@@ -38,9 +38,9 @@ In order to download, build and install STRique , execute the following commands
 ## Test
 Test the pipeline with the following commands in the cloned repository:
 
-	python scripts/STRique.py data models/template_median68pA6mer.model configs/c9orf72.json ./
+	python scripts/STRique.py data models/template_median68pA6mer.model configs/c9orf72.json ./c9orf72.tsv
 
-A File *0.tsv* with similar content should have been created:
+A File *c9orf72.tsv* with similar content should have been created:
 
 	ID	ref	flag	count	score_prefix	score_suffix	log_p	ticks	offset
 	ce47b364-ed6e-4409-808a-1041c0b5aac2	chr9	-	148	4690.2021484375	4738.76953125	-26745.348046750227	40978	1635
