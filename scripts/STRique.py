@@ -65,14 +65,15 @@ class pore_model():
     def normalize2model(self, signal, clip=True, mask=True):
         if mask:
             diff_signal = np.abs(np.diff([np.median(x) for x in sliding_window(signal, n=100)] + [np.median(signal)]))
-            q = np.percentile(diff_signal, 98)
+            q = np.percentile(diff_signal, 97)
             diff_mask = np.array([1 if x < q else 0 for x in diff_signal], dtype=np.dtype('uint8'))
             diff_mask = diff_mask.reshape((1, len(diff_mask)))
             flt = rectangle(1, 500)
             diff_mask = opening(diff_mask, flt)
             diff_mask = closing(diff_mask, flt)[0].astype(np.bool)
             rawMedian = np.median(signal[~diff_mask])
-            rawMAD = np.mean(np.absolute(np.subtract(signal, rawMedian)))
+            #rawMAD = np.mean(np.absolute(np.subtract(signal, rawMedian)))
+            rawMAD = np.mean(np.absolute(np.subtract(signal[~diff_mask], rawMedian)))
             # f, ax = plt.subplots(3, sharex=True)
             # ax[0].plot(signal, 'b-')
             # ax[0].axhline(rawMedian, color='r')
@@ -239,7 +240,13 @@ class repeatHMM(pg.HiddenMarkovModel):
 
     def __build_model__(self):
         self.pore_model = pore_model(self.model_file)
-        repeat = ''.join([self.repeat] * int(np.ceil((self.pore_model.kmer + 2) / len(self.repeat))))[:-1] # TODO check this expansion on shorter repeats
+        if len(self.repeat) >= self.pore_model.kmer:
+            repeat = self.repeat + self.repeat[: self.pore_model.kmer - 1]
+            self.repeat_multiplier = 0
+        else:
+            ext = self.pore_model.kmer - 1 + (len(self.repeat) - 1) - ((self.pore_model.kmer - 1) % len(self.repeat))
+            repeat = self.repeat + ''.join([self.repeat] * self.pore_model.kmer)[:ext]
+            self.repeat_multiplier = int(len(repeat) / len(self.repeat))
         self.repeat_hmm = profileHMM(repeat, self.model_file, transition_probs=self.transition_probs, state_prefix=self.state_prefix, 
                                      no_silent=True, std_scale=self.std_scale)
         self.add_model(self.repeat_hmm)
@@ -282,7 +289,7 @@ class repeatHMM(pg.HiddenMarkovModel):
         states = np.array([x[1] for x in states])
         n1 = np.sum(states == self.d1)
         n2 = np.sum(states == self.d2)
-        return n1 + n2
+        return n1 + n2 - self.repeat_multiplier
 
 
 # repeat detection profile HMM
