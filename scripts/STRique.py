@@ -64,11 +64,11 @@ class pore_model():
 
     def normalize2model(self, signal, clip=True, mask=True):
         if mask:
-            diff_signal = np.abs(np.diff([np.median(x) for x in sliding_window(signal, n=100)] + [np.median(signal)]))
+            diff_signal = np.abs(np.diff([np.median(x) for x in sliding_window(signal, n=200)] + [np.median(signal)]))
             q = np.percentile(diff_signal, 97)
             diff_mask = np.array([1 if x < q else 0 for x in diff_signal], dtype=np.dtype('uint8'))
             diff_mask = diff_mask.reshape((1, len(diff_mask)))
-            flt = rectangle(1, 500)
+            flt = rectangle(1, 300)
             diff_mask = opening(diff_mask, flt)
             diff_mask = closing(diff_mask, flt)[0].astype(np.bool)
             rawMedian = np.median(signal[~diff_mask])
