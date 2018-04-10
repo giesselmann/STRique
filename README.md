@@ -38,6 +38,7 @@ In order to download, build and install STRique , execute the following commands
 ## Test
 Test the pipeline with the following commands in the cloned repository:
 
+	python scripts/STRique_test.py
 	python scripts/STRique.py data models/template_median68pA6mer.model configs/c9orf72.json ./c9orf72.tsv
 
 A File *c9orf72.tsv* with similar content should have been created:
