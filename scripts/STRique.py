@@ -35,6 +35,10 @@ import pyseqan
 def sliding_window(a, n=3, mode='same'):
     if mode == 'mean':
         a = np.append(a, (n-1) * [np.mean(a)])
+    elif mode == 'median':
+        a = np.append(a, (n-1) * [np.median(a)])
+    elif mode == 'mirror':
+        a = np.append(a, a[-1:-1-(n-1):-1])
     else:
         a = np.append(a, (n-1) * [a[-1]])
     shape = a.shape[:-1] + (a.shape[-1] - n + 1, n)
@@ -64,15 +68,16 @@ class pore_model():
 
     def normalize2model(self, signal, clip=True, mask=True):
         if mask:
-            diff_signal = np.abs(np.diff([np.median(x) for x in sliding_window(signal, n=200)] + [np.median(signal)]))
+            sliding_std = [np.std(x) for x in sliding_window(signal, n=500, mode='mirror')]
+            sliding_std += [sliding_std[-1]]
+            diff_signal = np.abs(np.diff(sliding_std))
             q = np.percentile(diff_signal, 97)
             diff_mask = np.array([1 if x < q else 0 for x in diff_signal], dtype=np.dtype('uint8'))
             diff_mask = diff_mask.reshape((1, len(diff_mask)))
-            flt = rectangle(1, 300)
+            flt = rectangle(1, 500)
             diff_mask = opening(diff_mask, flt)
             diff_mask = closing(diff_mask, flt)[0].astype(np.bool)
             rawMedian = np.median(signal[~diff_mask])
-            #rawMAD = np.mean(np.absolute(np.subtract(signal, rawMedian)))
             rawMAD = np.mean(np.absolute(np.subtract(signal[~diff_mask], rawMedian)))
             # f, ax = plt.subplots(3, sharex=True)
             # ax[0].plot(signal, 'b-')
@@ -199,8 +204,8 @@ class profileHMM(pg.HiddenMarkovModel):
                     self.add_transition(state, self.match_states[i+2], self.transition_probs['delete'], group='delete')
             self.add_transition(self.s1, self.insertion_states[0], 1)
             self.add_transition(self.s2, self.match_states[0], 1)
-        self.add_transition(self.insertion_states[-1], self.e1, (1 - self.transition_probs['loop_insert']) * .1)
-        self.add_transition(self.insertion_states[-1], self.e2, (1 - self.transition_probs['loop_insert']) * .9)
+        self.add_transition(self.insertion_states[-1], self.e1, (1 - self.transition_probs['loop_insert']) * self.transition_probs['e1_ratio'])
+        self.add_transition(self.insertion_states[-1], self.e2, (1 - self.transition_probs['loop_insert']) * (1-self.transition_probs['e1_ratio']))
         self.add_transition(self.match_states[-1], self.e2, self.transition_probs['move'])
         self.add_transition(self.match_states[-1], self.e1, self.transition_probs['delete'])
 
@@ -296,9 +301,15 @@ class repeatHMM(pg.HiddenMarkovModel):
 class embeddedRepeatHMM(pg.HiddenMarkovModel):
     def __init__(self, repeat, 
                  prefix, suffix,
-                 model_file):
+                 model_file, config=None):
         super().__init__()
-        self.transition_probs = {'skip': 1-1e-4}
+        self.transition_probs = {'skip': 1-1e-4,
+                                 'seq_std_scale': 1.2,
+                                 'rep_std_scale': 1.4,
+                                 'e1_ratio': 0.1}
+        if config and isinstance(config, dict):
+            for key, value in config.items():
+                self.transition_probs[key] = value
         self.model_file = model_file
         self.repeat = repeat
         self.prefix = prefix
@@ -310,15 +321,15 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
         # expand primer sequences and get profile HMMs
         prefix = self.prefix + self.repeat[:-1]
         suffix = self.repeat + self.suffix  
-        self.prefix_model = profileHMM(prefix, self.model_file, self.transition_probs, state_prefix='prefix', std_scale=1.2)
-        self.suffix_model = profileHMM(suffix, self.model_file, self.transition_probs, state_prefix='suffix', std_scale=1.8)
-        self.repeat_model = repeatHMM(self.repeat, self.model_file, self.transition_probs, state_prefix='repeat', std_scale=1.2)
+        self.prefix_model = profileHMM(prefix, self.model_file, self.transition_probs, state_prefix='prefix', std_scale=self.transition_probs['seq_std_scale'])
+        self.suffix_model = profileHMM(suffix, self.model_file, self.transition_probs, state_prefix='suffix', std_scale=self.transition_probs['rep_std_scale'])
+        self.repeat_model = repeatHMM(self.repeat, self.model_file, self.transition_probs, state_prefix='repeat', std_scale=self.transition_probs['seq_std_scale'])
         # add sub-modules, flanking and skip states
         self.add_model(self.prefix_model)
         self.add_model(self.repeat_model)
         self.add_model(self.suffix_model)
-        self.add_transition(self.start, self.prefix_model.s1, .1)
-        self.add_transition(self.start, self.prefix_model.s2, .9)
+        self.add_transition(self.start, self.prefix_model.s1, self.transition_probs['e1_ratio'])
+        self.add_transition(self.start, self.prefix_model.s2, (1-self.transition_probs['e1_ratio']))
         # repeat model
         self.add_transition(self.prefix_model.e1, self.repeat_model.s1, 1)
         self.add_transition(self.prefix_model.e2, self.repeat_model.s2, 1)
@@ -337,38 +348,46 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
             n = self.repeat_model.count_repeats(path) + 1
             path = np.array([x[0] for x in path])
             path = path[path < self.silent_start]
-            return n, p
+            return n, p, path
         else:
-            return 0, 0
+            return 0, 0, np.array([])
 
 
 # main repeat detection methods
 class repeatDetection(object):
     def __init__(self, model_file,
                  repeat, prefix, suffix,
-                 prefix2=None, suffix2=None):
+                 prefix2=None, suffix2=None, align_config=None, HMM_config=None):
         self.algn = pyseqan.align_raw()
-        # self.algn.dist_offset = 8.0
-        # self.algn.gap_open = -2.0           # -16.0
-        # self.algn.gap_extension = -8.0     # -4.0
-        # self.algn.dist_min = -16.0
+        default_config =  {'dist_offset': 8.0,
+                             'dist_min': -8.0,
+                             'gap_open': -2.0,
+                             'gap_extension': -8.0,
+                             'samples': 9}
+        if align_config and isinstance(align_config, dict):
+            for key, value in align_config.items():
+                default_config[key] = value            
+        self.algn.dist_offset = default_config['dist_offset']
+        self.algn.gap_open = default_config['gap_open']
+        self.algn.gap_extension = default_config['gap_extension']
+        self.algn.dist_min = default_config['dist_min']
         self.pm = pore_model(model_file)
         if not prefix2:
             prefix2 = prefix
         if not suffix2:
             suffix2 = suffix
         self.score_min = len(prefix2) * 15
-        self.samples = 8
+        self.samples = default_config['samples']
         self.sim_prefix = self.pm.generate_signal(prefix, samples=self.samples)
         self.sim_suffix = self.pm.generate_signal(suffix, samples=self.samples)
         self.sim_prefix2 = self.pm.generate_signal(prefix2, samples=self.samples)
         self.sim_suffix2 = self.pm.generate_signal(suffix2, samples=self.samples)
-        self.flanked_model = embeddedRepeatHMM(repeat, prefix, suffix, model_file)
+        self.flanked_model = embeddedRepeatHMM(repeat, prefix, suffix, model_file, HMM_config)
 
-    def detect_range(self, signal, segment):
+    def detect_range(self, signal, segment, pre_trim=0, post_trim=0):
         score, idx_signal, idx_segment = self.algn.align_overlap(signal, segment)
-        segment_begin = np.abs(np.array(idx_signal) - idx_segment[0]).argmin()
-        segment_end = np.abs(np.array(idx_signal) - idx_segment[-1]).argmin()
+        segment_begin = np.abs(np.array(idx_signal) - idx_segment[0 + pre_trim]).argmin()
+        segment_end = np.abs(np.array(idx_signal) - idx_segment[-1 - post_trim]).argmin()
         return score, segment_begin, segment_end
 
     def detect_short(self, segment):
@@ -376,15 +395,21 @@ class repeatDetection(object):
 
     def detect(self, signal):
         nrm_signal = sp.medfilt(signal, kernel_size=3) 
-        # nrm_signal = (nrm_signal - np.median(nrm_signal)) / np.std(nrm_signal)
-        # nrm_signal = np.clip(nrm_signal * 42 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
-        # flt = rectangle(1, 4)
-        # nrm_signal = opening(nrm_signal, flt)
-        # nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
+        nrm_signal = (nrm_signal - np.median(nrm_signal)) / np.std(nrm_signal)
+        nrm_signal = np.clip(nrm_signal * 42 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
+        flt = rectangle(1, 4)
+        nrm_signal = opening(nrm_signal, flt)
+        nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
         nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), clip=True)
-        score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2)
-        score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2)
-        # f, ax = plt.subplots(1)
+        trim_prefix = (len(self.sim_prefix2) - len(self.sim_prefix))
+        trim_suffix = (len(self.sim_suffix2) - len(self.sim_suffix))
+        score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2, pre_trim=trim_prefix)
+        score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2, post_trim=trim_suffix)
+        n = 0; p = 0
+        if prefix_end < suffix_begin:
+            n, p, path = self.detect_short(nrm_signal[prefix_begin:suffix_end])
+        # f, axs = plt.subplots(2, sharex=True)
+        # ax = axs[0]
         # ax.plot(nrm_signal, 'k-')
         # ax.plot(np.arange(len(self.sim_prefix2)) + prefix_begin, self.sim_prefix2, 'b-')
         # ax.plot(np.arange(len(self.sim_suffix2)) + suffix_begin, self.sim_suffix2, 'b-')
@@ -392,13 +417,10 @@ class repeatDetection(object):
         # ax.axvline(prefix_end, color='r')
         # ax.axvline(suffix_begin, color='b')
         # ax.axvline(suffix_end, color='b')
+        # ax.set_title('Detected ' + str(n) + ' repeats')
+        # ax = axs[1]
+        # ax.plot(np.arange(len(path)) + prefix_begin, path, 'b-')
         # plt.show()
-        n = 0; p = 0
-        if prefix_end < suffix_begin:
-            sp2, hmm_begin, _ = self.detect_range(nrm_signal[prefix_begin:suffix_end], self.sim_prefix)
-            ss2, _, hmm_end = self.detect_range(nrm_signal[prefix_begin:suffix_end], self.sim_suffix)
-            if prefix_begin + hmm_begin < prefix_begin + hmm_end and score_prefix > self.score_min and score_suffix > self.score_min:
-                n, p = self.detect_short(nrm_signal[prefix_begin+hmm_begin:prefix_begin+hmm_end])
         return n, score_prefix, score_suffix, p, suffix_begin - prefix_end, prefix_end
 
 
@@ -432,13 +454,15 @@ def process_detection(config, record_IDs, output_queue, counter):
                                                prefix=prefix[key], 
                                                suffix=suffix[key], 
                                                prefix2=prefix2[key],
-                                               suffix2=suffix2[key]),
+                                               suffix2=suffix2[key],
+                                               align_config=config['align'], HMM_config=config['HMM']),
                                repeatDetection(model_file=model_file,
                                                repeat=Bio.Seq.reverse_complement(value), 
                                                prefix=Bio.Seq.reverse_complement(suffix[key]),
                                                suffix=Bio.Seq.reverse_complement(prefix[key]),
                                                prefix2=Bio.Seq.reverse_complement(suffix2[key]),
-                                               suffix2=Bio.Seq.reverse_complement(prefix2[key]))
+                                               suffix2=Bio.Seq.reverse_complement(prefix2[key]),
+                                               align_config=config['align'], HMM_config=config['HMM'])
                                )
 
         # analyze each read
@@ -491,10 +515,11 @@ def process_detection(config, record_IDs, output_queue, counter):
 
             
 # parse config.json            
-def parse_config(f5_dir, model_file, config_file, bed_file):
-    with open(config_file) as fp:
+def parse_config(f5_dir, model_file, repeat_config_file, bed_file, config_file=None):
+    with open(repeat_config_file) as fp:
         ld_conf = json.load(fp)
     config = {}
+    # parse repeat config
     try:
         config['model_file'] = model_file
         config['fast5_dir'] = f5_dir
@@ -514,8 +539,25 @@ def parse_config(f5_dir, model_file, config_file, bed_file):
         else:
             config['suffix2'] = ld_conf['suffix']
     except KeyError as e:
-        print('Error loading config file, missing', e.args[0])
+        print('Error loading repeat config file, missing', e.args[0])
         exit(1)
+    # parse HMM and alignment config
+    if config_file:
+        with open(config_file) as fp:
+            ld_conf = json.load(fp)
+        try:
+            assert(isinstance(ld_conf, dict))
+            assert(isinstance(ld_conf['align'], dict))
+            assert(isinstance(ld_conf['HMM'], dict))
+            # Do not check values, missing ones get defaulted, additional ones ignored
+            config['align'] = ld_conf['align']
+            config['HMM'] = ld_conf['HMM']
+        except KeyError as e:
+            print('Error loading HMM config file, missing', e.args[0])
+            exit(1)
+        except AssertionError as e:
+            print('Config file format broken', b)
+            exit(1)
     return config
         
  
@@ -549,9 +591,26 @@ if __name__ == '__main__':
     parser.add_argument("out", help="output file name")
     parser.add_argument("--bed", help="alignment information in BED-6 format")
     parser.add_argument("--t", type=int, default=1, help="Number of processes to use in parallel")
+    parser.add_argument("--hmm", help="Config file for HMM transition probabilities")
     args = parser.parse_args()
+    # validate input arguments
+    if not os.path.isdir(args.f5):
+        print("Fast5 file path is not a directory.")
+        exit(1)
+    if not os.path.isfile(args.model):
+        print("Model file not found.")
+        exit(1)
+    if not os.path.isfile(args.config):
+        print("Repeat config file " + str(args.config) + " not found.")
+        exit(1)
+    if args.bed and not os.path.isfile(args.bed):
+        print("Bed file specified but not found.")
+        exit(1)
+    if args.hmm and not os.path.isfile(args.hmm):
+        print("HMM config file specified but not found.")
+        exit(1)
     # load config
-    config = parse_config(args.f5, args.model, args.config, args.bed)
+    config = parse_config(args.f5, args.model, args.config, args.bed, args.hmm)
     # index/load reads
     f5 = fast5Index.fast5Index()
     f5.loadOrAnalyze(config['fast5_dir'], recursive=True)

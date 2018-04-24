@@ -59,8 +59,24 @@ class DetectionTest(unittest.TestCase):
             sig = pm.generate_signal(seq, samples=8)
             n, score_prefix, score_suffix, p, ticks, prefix_end = dt.detect(sig)
             self.assertEqual(n, i)
-            #print('Expected: ', i, ' detected: ', n)
+            print('Expected: ', i, ' detected: ', n)
 
+    def test_normalization(self):
+        model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'template_median68pA6mer.model')
+        pm = STRique.pore_model(model_file)
+        prefix = 'CGGCAGCCGAACCCCAAACAGCCACCCGCCAGGATGCCGCCTCCTCACTCACCCACTCGCCACCGCCTGCGCCTCCGCCGCCGCGGGCGCAGGCACCGCAACCGCAGCCCCGCCCCGGGCCCGCCCCCGGGCCCGCCCCGACCACGCCCC'
+        suffix = 'TAGCGCGCGACTCCTGAGTTCCAGAGCTTGCTACAGGCTGCGGTTGTTTCCCTCCTTGTTTTCTTCTGGTTAATCTTTATCAGGTCTTTTCTTGTTCACCCTCAGCGAGTACTGTGAGAGCAAGTAGTGGGGAGAGAGGGTGGGAAAAAC'
+        repeat = 'GGCCCC'
+        dt = STRique.repeatDetection(model_file, repeat, prefix[-50:], suffix[:50], prefix, suffix)
+        print('Test normalization on short prefix/suffix sequences')
+        for i in range(10, 100, 10):
+            print('Test repeat length:', i)
+            seq = prefix + repeat * i + suffix
+            sig = pm.generate_signal(seq, samples=8)
+            n, score_prefix, score_suffix, p, ticks, prefix_end = dt.detect(sig)
+            #self.assertEqual(n, i)
+            print('Expected: ', i, ' detected: ', n)
+            
             
 # main function
 if __name__ == '__main__':

@@ -1,0 +1,23 @@
+{
+	"align":
+	{
+		"samples": 9,
+		"dist_offset": 8.0,
+		"dist_min": -8.0,
+		"gap_open": -2.0,
+		"gap_extensiion": -8.0
+	},
+	"HMM":
+	{
+		"loop": 0.95,
+		"move": 0.042,
+		"insert": 0.006,
+		"loop_insert": 0.30,
+		"delete": 0.002,
+		"delete_multiple": 0.005,
+		"leave_repeat": 0.002,
+		"e1_ratio": 0.15,
+		"seq_std_scale": 2.0,
+		"rep_std_scale": 4.0
+	}
+}
