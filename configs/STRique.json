@@ -9,15 +9,25 @@
 	},
 	"HMM":
 	{
-		"loop": 0.70,
-		"move": 0.25,
-		"insert": 0.04,
-		"delete": 0.01,
-		"loop_insert": 0.30,
-		"delete_multiple": 0.001,
 		"leave_repeat": 0.002,
 		"e1_ratio": 0.1,
-		"seq_std_scale": 2.5,
-		"rep_std_scale": 2.5
+		"seq_std_scale": 1.0,
+		"rep_std_scale": 1.0,
+		"seq_std_offset": 4.0,
+		"rep_std_offset": 5.0,
+		
+		"match_loop": .50,
+		"match_match": .25,
+		"match_insert": .20,
+		"match_delete": .05,
+
+		"insert_loop" : .15,
+		"insert_match_0": .40,
+		"insert_match_1": .40,
+		"insert_delete": .05,
+
+		"delete_delete": .005,
+		"delete_insert": .05,
+		"delete_match": .945 
 	}
 }

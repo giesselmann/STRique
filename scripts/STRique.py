@@ -32,6 +32,8 @@ import fast5Index
 import pyseqan
 
 
+
+
 def sliding_window(a, n=3, mode='same'):
     if mode == 'mean':
         a = np.append(a, (n-1) * [np.mean(a)])
@@ -44,6 +46,8 @@ def sliding_window(a, n=3, mode='same'):
     shape = a.shape[:-1] + (a.shape[-1] - n + 1, n)
     strides = a.strides + (a.strides[-1],)
     return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+
+
 
 
 # basic normalization and simulation
@@ -90,14 +94,14 @@ class pore_model():
         nrm_signal = np.add(np.multiply(nrm_signal, self.model_MAD), self.model_median)
         if clip == True:
             np.clip(nrm_signal, self.model_min + .5, self.model_max - .5, out=nrm_signal)
-        if mask:
-            f, ax = plt.subplots(3, sharex=True)
-            ax[0].plot(nrm_signal, 'k-')
-            ax[0].axhline(rawMedian, color='r')
-            ax[0].axhline(np.median(signal), color='g')
-            ax[1].plot(diff_mask, 'k-')
-            ax[2].plot(diff_signal, 'k-')
-            plt.show()
+        # if mask:
+            # f, ax = plt.subplots(3, sharex=True)
+            # ax[0].plot(nrm_signal, 'k-')
+            # ax[0].axhline(rawMedian, color='r')
+            # ax[0].axhline(np.median(signal), color='g')
+            # ax[1].plot(diff_mask, 'k-')
+            # ax[2].plot(diff_signal, 'k-')
+            # plt.show()
         return nrm_signal
 
     def generate_signal(self, sequence, samples=10):
@@ -123,24 +127,38 @@ class bed_parser():
             return self.records[key]
         else:
             return None
-        
-        
-# profile HMM base class
-class profileHMM(pg.HiddenMarkovModel):         
-    def __init__(self, sequence, 
-                 model_file, transition_probs={}, state_prefix='', no_silent=False, std_scale=1.0):
+
+
+
+
+# profile HMM
+class profileHMM(pg.HiddenMarkovModel):
+    def __init__(self, sequence,
+                 pm_base, transition_probs={}, state_prefix='',
+                 no_silent=False,
+                 std_scale=1.0, std_offset=0.0
+                 ):
         super().__init__()
-        self.pore_model = pore_model(model_file)
+        self.pm_base = pm_base
         self.sequence = sequence
         self.state_prefix = state_prefix
         self.no_silent = no_silent
         self.std_scale = std_scale
-        self.transition_probs = {'loop': .95,
-                                 'move': .042,
-                                 'insert': .006,
-                                 'loop_insert' : .30,
-                                 'delete': .002,
-                                 'delete_multiple': .005}
+        self.std_offset = std_offset
+        self.transition_probs = {'match_loop': .50,     #
+                                 'match_match': .25,    # sum to 1
+                                 'match_insert': .20,   #
+                                 'match_delete': .05,   #
+
+                                 'insert_loop' : .15,   #
+                                 'insert_match_0': .40, # sum to 1
+                                 'insert_match_1': .40, #
+                                 'insert_delete': .05,  #
+
+                                 'delete_delete': .005, #
+                                 'delete_insert': .05,  # sum to 1
+                                 'delete_match': .945   #
+                                 }
         for key, value in transition_probs.items():
             self.transition_probs[key] = value
         self.__init_model__()
@@ -159,15 +177,15 @@ class profileHMM(pg.HiddenMarkovModel):
         match_states = []
         insertion_states = []
         deletion_states = []
-        digits = np.ceil(np.log10(len(sequence) - self.pore_model.kmer + 1)).astype(np.int)
-        for idx, kmer in enumerate([sequence[i:i+self.pore_model.kmer] for i in range(len(sequence) - self.pore_model.kmer + 1)]):
+        digits = np.ceil(np.log10(len(sequence) - self.pm_base.kmer + 1)).astype(np.int)
+        for idx, kmer in enumerate([sequence[i:i+self.pm_base.kmer] for i in range(len(sequence) - self.pm_base.kmer + 1)]):
             state_name = self.state_prefix + str(idx).rjust(digits,'0')
-            state_mean, state_std = self.pore_model.model_dict[kmer]
-            match_states.append(pg.State(pg.NormalDistribution(state_mean, state_std * self.std_scale), 
-                                name=state_name + 'm'))
-            deletion_states.append(pg.State(None, name=state_name + 'd'))
-            insertion_states.append(pg.State(pg.UniformDistribution(self.pore_model.model_min, self.pore_model.model_max),
-                                    name=state_name + 'i'))                                              
+            state_mean, state_std = self.pm_base.model_dict[kmer]
+            match_states.append(pg.State(pg.NormalDistribution(state_mean, state_std * self.std_scale + self.std_offset), name=state_name + 'm'))
+            if not self.no_silent:
+                deletion_states.append(pg.State(None, name=state_name + 'd'))
+            insertion_states.append(pg.State(pg.UniformDistribution(self.pm_base.model_min, self.pm_base.model_max),
+                                    name=state_name + 'i'))
         return match_states, insertion_states, deletion_states
 
     def __connect_states__(self):
@@ -178,41 +196,42 @@ class profileHMM(pg.HiddenMarkovModel):
         self.add_states([self.s1, self.s2, self.e1, self.e2])
         # matches
         for i, state in enumerate(self.match_states):
-            self.add_transition(state, state, self.transition_probs['loop'], group='loop')
+            self.add_transition(state, state, self.transition_probs['match_loop'], group='match_loop')
             if i < len(self.match_states) - 1:
-                self.add_transition(state, self.match_states[i + 1], self.transition_probs['move'], group='move')
+                self.add_transition(state, self.match_states[i + 1], self.transition_probs['match_match'], group='match_match')
         # insertions
         for i, state in enumerate(self.insertion_states):
-            self.add_transition(state, state, self.transition_probs['loop_insert'], group='loop_insert')
-            self.add_transition(self.match_states[i], state, self.transition_probs['insert'], group='insert')
+            self.add_transition(state, state, self.transition_probs['insert_loop'], group='insert_loop')
+            self.add_transition(self.match_states[i], state, self.transition_probs['match_insert'], group='match_insert')
+            self.add_transition(state, self.match_states[i], self.transition_probs['insert_match_1'], group='insert_match_1')
             if i < len(self.deletion_states) - 1 and not self.no_silent:
-                self.add_transition(state, self.deletion_states[i+1], (1 - self.transition_probs['loop_insert']) * .1, group='loop_insert_n')
+                self.add_transition(state, self.deletion_states[i+1], self.transition_probs['insert_delete'], group='insert_delete')
             if i < len(self.match_states) - 1:
-                self.add_transition(state, self.match_states[i+1], (1 - self.transition_probs['loop_insert']) * .9, group='loop_insert_n')
+                self.add_transition(state, self.match_states[i+1], self.transition_probs['insert_match_0'], group='insert_match_0')
         # deletions
         if not self.no_silent:
             for i, state in enumerate(self.deletion_states):
-                self.add_transition(state, self.insertion_states[i], (1 - self.transition_probs['delete_multiple']) * .1, group='delete_multiple_n')
+                self.add_transition(state, self.insertion_states[i], self.transition_probs['delete_insert'], group='delete_insert')
                 if i > 0:
-                    self.add_transition(self.match_states[i-1], state, self.transition_probs['delete'], group='delete')
+                    self.add_transition(self.match_states[i-1], state, self.transition_probs['match_delete'], group='match_delete')
                 if i < len(self.match_states) - 1:
-                    self.add_transition(state, self.match_states[i+1], (1 - self.transition_probs['delete_multiple']) * .9, group='delete_multiple_n')
+                    self.add_transition(state, self.match_states[i+1], self.transition_probs['delete_match'], group='delete_match')
                 if i < len(self.deletion_states) - 1:
-                    self.add_transition(state, self.deletion_states[i+1], self.transition_probs['delete_multiple'], group='delete_multiple')
+                    self.add_transition(state, self.deletion_states[i+1], self.transition_probs['delete_delete'], group='delete_delete')
             self.add_transition(self.s1, self.deletion_states[0], 1)
             self.add_transition(self.s2, self.match_states[0], 1)
-            self.add_transition(self.deletion_states[-1], self.e1, self.transition_probs['delete_multiple'])
-            self.add_transition(self.deletion_states[-1], self.e2, (1 - self.transition_probs['delete_multiple']))
+            self.add_transition(self.deletion_states[-1], self.e1, self.transition_probs['delete_delete'])
+            self.add_transition(self.deletion_states[-1], self.e2, self.transition_probs['delete_match'])
         else:
             for i, state in enumerate(self.match_states):
                 if i < len(self.match_states) - 2:
-                    self.add_transition(state, self.match_states[i+2], self.transition_probs['delete'], group='delete')
+                    self.add_transition(state, self.match_states[i+2], self.transition_probs['match_delete'], group='match_delete')
             self.add_transition(self.s1, self.insertion_states[0], 1)
             self.add_transition(self.s2, self.match_states[0], 1)
-        self.add_transition(self.insertion_states[-1], self.e1, (1 - self.transition_probs['loop_insert']) * self.transition_probs['e1_ratio'])
-        self.add_transition(self.insertion_states[-1], self.e2, (1 - self.transition_probs['loop_insert']) * (1-self.transition_probs['e1_ratio']))
-        self.add_transition(self.match_states[-1], self.e2, self.transition_probs['move'])
-        self.add_transition(self.match_states[-1], self.e1, self.transition_probs['delete'])
+        self.add_transition(self.insertion_states[-1], self.e1, self.transition_probs['insert_delete'], group='insert_delete')
+        self.add_transition(self.insertion_states[-1], self.e2, self.transition_probs['insert_match_0'], group='insert_match_0')
+        self.add_transition(self.match_states[-1], self.e2, self.transition_probs['match_match'])
+        self.add_transition(self.match_states[-1], self.e1, self.transition_probs['match_delete'])
 
     def bake(self, *args, **kwargs):
         self.add_transition(self.start, self.s1, .5)
@@ -222,9 +241,11 @@ class profileHMM(pg.HiddenMarkovModel):
         super().bake(*args, **kwargs)
 
 
+
+
 # repeat count profile HMM
 class repeatHMM(pg.HiddenMarkovModel):
-    def __init__(self, repeat, model_file, transition_probs={}, state_prefix='', std_scale=1.0):
+    def __init__(self, repeat, model_file, transition_probs={}, state_prefix='', std_scale=1.0, std_offset=0.0):
         super().__init__()
         self.repeat = repeat
         self.model_file = model_file
@@ -236,16 +257,13 @@ class repeatHMM(pg.HiddenMarkovModel):
                                  # 'loop_insert' : .30,
                                  # 'delete': .002}
         self.transition_probs = {'skip': .999,   # 99
-                                 'leave_repeat': .000002,
-                                 'loop': .90,
-                                 'move': .070,
-                                 'insert': .026,
-                                 'loop_insert' : .90,
-                                 'delete': .022}
+                                 'leave_repeat': .000002
+                                 }
         for key, value in transition_probs.items():
             self.transition_probs[key] = value
         self.state_prefix = state_prefix
         self.std_scale = std_scale
+        self.std_offset = std_offset
         self.__build_model__()
 
     def __build_model__(self):
@@ -257,8 +275,8 @@ class repeatHMM(pg.HiddenMarkovModel):
             ext = self.pore_model.kmer - 1 + (len(self.repeat) - 1) - ((self.pore_model.kmer - 1) % len(self.repeat))
             repeat = self.repeat + ''.join([self.repeat] * self.pore_model.kmer)[:ext]
             self.repeat_offset = int(len(repeat) / len(self.repeat)) - 1
-        self.repeat_hmm = profileHMM(repeat, self.model_file, transition_probs=self.transition_probs, state_prefix=self.state_prefix, 
-                                     no_silent=True, std_scale=self.std_scale)
+        self.repeat_hmm = profileHMM(repeat,self.pore_model, transition_probs=self.transition_probs, state_prefix=self.state_prefix, 
+                                     no_silent=True, std_scale=self.std_scale, std_offset=self.std_offset)
         self.add_model(self.repeat_hmm)
         self.skip_distribution = pg.NormalDistribution(self.pore_model.model_median, self.pore_model.model_MAD)
         self.dummy_distribution = pg.UniformDistribution(self.pore_model.model_min, self.pore_model.model_max)
@@ -302,6 +320,8 @@ class repeatHMM(pg.HiddenMarkovModel):
         return n1 + n2 - self.repeat_offset
 
 
+
+
 # repeat detection profile HMM
 class embeddedRepeatHMM(pg.HiddenMarkovModel):
     def __init__(self, repeat, 
@@ -309,8 +329,10 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
                  model_file, config=None):
         super().__init__()
         self.transition_probs = {'skip': 1-1e-4,
-                                 'seq_std_scale': 1.2,
-                                 'rep_std_scale': 1.4,
+                                 'seq_std_scale': 1.0,
+                                 'rep_std_scale': 1.0,
+                                 'seq_std_offset': 4.0,
+                                 'rep_std_offset': 5.0,
                                  'e1_ratio': 0.1}
         if config and isinstance(config, dict):
             for key, value in config.items():
@@ -327,9 +349,9 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
         prefix = self.prefix + ''.join([self.repeat] * int(np.ceil(self.pore_model.kmer / len(self.repeat))))[:-1]
         suffix = ''.join([self.repeat] * int(np.ceil(self.pore_model.kmer / len(self.repeat)))) + self.suffix
         self.flanking_count = int(np.ceil(self.pore_model.kmer / len(self.repeat))) * 2 - 1
-        self.prefix_model = profileHMM(prefix, self.model_file, self.transition_probs, state_prefix='prefix', std_scale=self.transition_probs['seq_std_scale'])
-        self.suffix_model = profileHMM(suffix, self.model_file, self.transition_probs, state_prefix='suffix', std_scale=self.transition_probs['rep_std_scale'])
-        self.repeat_model = repeatHMM(self.repeat, self.model_file, self.transition_probs, state_prefix='repeat', std_scale=self.transition_probs['seq_std_scale'])
+        self.prefix_model = profileHMM(prefix, self.pore_model, self.transition_probs, state_prefix='prefix', std_scale=self.transition_probs['seq_std_scale'], std_offset=self.transition_probs['seq_std_offset'])
+        self.suffix_model = profileHMM(suffix, self.pore_model, self.transition_probs, state_prefix='suffix', std_scale=self.transition_probs['rep_std_scale'], std_offset=self.transition_probs['seq_std_offset'])
+        self.repeat_model = repeatHMM(self.repeat, self.model_file, self.transition_probs, state_prefix='repeat', std_scale=self.transition_probs['seq_std_scale'], std_offset=self.transition_probs['rep_std_offset'])
         # add sub-modules, flanking and skip states
         self.add_model(self.prefix_model)
         self.add_model(self.repeat_model)
@@ -359,6 +381,8 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
             return 0, 0, np.array([])
 
 
+
+
 # main repeat detection methods
 class repeatDetection(object):
     def __init__(self, model_file,
@@ -382,7 +406,6 @@ class repeatDetection(object):
             prefix2 = prefix
         if not suffix2:
             suffix2 = suffix
-        self.score_min = len(prefix2) * 15
         self.samples = default_config['samples']
         self.sim_prefix = self.pm.generate_signal(prefix, samples=self.samples)
         self.sim_suffix = self.pm.generate_signal(suffix, samples=self.samples)
@@ -415,20 +438,22 @@ class repeatDetection(object):
         n = 0; p = 0; path = np.array([])
         if prefix_end < suffix_begin:
             n, p, path = self.detect_short(flt_signal[prefix_begin:suffix_end])
-        f, axs = plt.subplots(2, sharex=True)
-        ax = axs[0]
-        ax.plot(flt_signal, 'k-')
-        ax2 = ax.twinx()
-        ax.plot(nrm_signal, 'k-', alpha=0.3)
-        ax.axvline(prefix_begin, color='r')
-        ax.axvline(prefix_end, color='r')
-        ax.axvline(suffix_begin, color='b')
-        ax.axvline(suffix_end, color='b')
-        ax.set_title('Detected ' + str(n) + ' repeats')
-        ax = axs[1]
-        ax.plot(np.arange(len(path)) + prefix_begin, path, 'b-')
-        plt.show()
+        # f, axs = plt.subplots(2, sharex=True)
+        # ax = axs[0]
+        # ax.plot(flt_signal, 'k-')
+        # ax2 = ax.twinx()
+        # ax.plot(nrm_signal, 'k-', alpha=0.3)
+        # ax.axvline(prefix_begin, color='r')
+        # ax.axvline(prefix_end, color='r')
+        # ax.axvline(suffix_begin, color='b')
+        # ax.axvline(suffix_end, color='b')
+        # ax.set_title('Detected ' + str(n) + ' repeats')
+        # ax = axs[1]
+        # ax.plot(np.arange(len(path)) + prefix_begin, path, 'b-')
+        # plt.show()
         return n, score_prefix, score_suffix, p, suffix_begin - prefix_end, prefix_end
+
+
 
 
 # main repeat detection worker
@@ -519,7 +544,9 @@ def process_detection(config, record_IDs, output_queue, counter):
     except KeyboardInterrupt:
         return
 
-            
+        
+
+        
 # parse config.json            
 def parse_config(f5_dir, model_file, repeat_config_file, bed_file, config_file=None):
     with open(repeat_config_file) as fp:
@@ -567,6 +594,8 @@ def parse_config(f5_dir, model_file, repeat_config_file, bed_file, config_file=N
     return config
         
  
+ 
+ 
 # print progess on command line
 def process_output(counter, return_values, output_file, max_count, stop_event):
     import time
@@ -587,7 +616,9 @@ def process_output(counter, return_values, output_file, max_count, stop_event):
         except Exception as e:
             print('Exception in I/O Process: ', e)
         
-        
+ 
+
+ 
 if __name__ == '__main__':
     # command line
     parser = argparse.ArgumentParser(description="STR Detection in raw nanopore data")
