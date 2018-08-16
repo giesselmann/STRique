@@ -9,15 +9,15 @@
 	},
 	"HMM":
 	{
-		"loop": 0.95,
-		"move": 0.042,
-		"insert": 0.006,
+		"loop": 0.70,
+		"move": 0.25,
+		"insert": 0.04,
+		"delete": 0.01,
 		"loop_insert": 0.30,
-		"delete": 0.002,
-		"delete_multiple": 0.005,
+		"delete_multiple": 0.001,
 		"leave_repeat": 0.002,
-		"e1_ratio": 0.15,
-		"seq_std_scale": 2.0,
-		"rep_std_scale": 4.0
+		"e1_ratio": 0.1,
+		"seq_std_scale": 2.5,
+		"rep_std_scale": 2.5
 	}
 }

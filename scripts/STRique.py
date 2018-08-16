@@ -22,7 +22,7 @@ import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
 import pomegranate as pg
-from skimage.morphology import opening, closing, rectangle
+from skimage.morphology import opening, closing, dilation, erosion, rectangle
 import matplotlib.pyplot as plt
 from multiprocessing import Pool, Process, Event, Value, Queue
 
@@ -65,27 +65,24 @@ class pore_model():
         self.model_min = min_state[0] - 6 * min_state[1]
         self.model_max = max_state[0] + 6 * max_state[1]
         self.model_dict = model_dict
+        
+    def MAD(self, signal):
+        return np.mean(np.absolute(np.subtract(signal, np.median(signal))))
 
     def normalize2model(self, signal, clip=True, mask=True):
         if mask:
-            sliding_std = [np.std(x) for x in sliding_window(signal, n=500, mode='mirror')]
+            #sliding_std = [np.std(x) for x in sliding_window(signal, n=1000, mode='mirror')]
+            sliding_std = [self.MAD(x) for x in sliding_window(signal, n=500, mode='mirror')]
             sliding_std += [sliding_std[-1]]
             diff_signal = np.abs(np.diff(sliding_std))
-            q = np.percentile(diff_signal, 97)
-            diff_mask = np.array([1 if x < q else 0 for x in diff_signal], dtype=np.dtype('uint8'))
-            diff_mask = diff_mask.reshape((1, len(diff_mask)))
-            flt = rectangle(1, 500)
-            diff_mask = opening(diff_mask, flt)
-            diff_mask = closing(diff_mask, flt)[0].astype(np.bool)
-            rawMedian = np.median(signal[~diff_mask])
-            rawMAD = np.mean(np.absolute(np.subtract(signal[~diff_mask], rawMedian)))
-            # f, ax = plt.subplots(3, sharex=True)
-            # ax[0].plot(signal, 'b-')
-            # ax[0].axhline(rawMedian, color='r')
-            # ax[0].axhline(np.median(signal), color='g')
-            # ax[1].plot(~diff_mask, 'k-')
-            # ax[2].plot(diff_signal, 'k-')
-            # plt.show()
+            ind = np.argpartition(diff_signal, -100)[-100:]
+            # q = np.percentile(diff_signal, 97)  # 99.5
+            # diff_mask = np.array([0 if x < q else 1 for x in diff_signal], dtype=np.dtype('uint8'))
+            diff_mask = np.zeros(len(diff_signal), dtype=np.dtype('uint8'))
+            diff_mask[ind] = 1
+            diff_mask = dilation(diff_mask.reshape((1, len(diff_mask))), rectangle(1, 750))[0].astype(np.bool)
+            rawMedian = np.median(signal[diff_mask])
+            rawMAD = np.mean(np.absolute(np.subtract(signal[diff_mask], rawMedian)))
         else:
             rawMedian = np.median(signal)
             rawMAD = np.mean(np.absolute(np.subtract(signal, rawMedian)))
@@ -93,6 +90,14 @@ class pore_model():
         nrm_signal = np.add(np.multiply(nrm_signal, self.model_MAD), self.model_median)
         if clip == True:
             np.clip(nrm_signal, self.model_min + .5, self.model_max - .5, out=nrm_signal)
+        if mask:
+            f, ax = plt.subplots(3, sharex=True)
+            ax[0].plot(nrm_signal, 'k-')
+            ax[0].axhline(rawMedian, color='r')
+            ax[0].axhline(np.median(signal), color='g')
+            ax[1].plot(diff_mask, 'k-')
+            ax[2].plot(diff_signal, 'k-')
+            plt.show()
         return nrm_signal
 
     def generate_signal(self, sequence, samples=10):
@@ -247,11 +252,11 @@ class repeatHMM(pg.HiddenMarkovModel):
         self.pore_model = pore_model(self.model_file)
         if len(self.repeat) >= self.pore_model.kmer:
             repeat = self.repeat + self.repeat[: self.pore_model.kmer - 1]
-            self.repeat_multiplier = 0
+            self.repeat_offset = 0
         else:
             ext = self.pore_model.kmer - 1 + (len(self.repeat) - 1) - ((self.pore_model.kmer - 1) % len(self.repeat))
             repeat = self.repeat + ''.join([self.repeat] * self.pore_model.kmer)[:ext]
-            self.repeat_multiplier = int(len(repeat) / len(self.repeat))
+            self.repeat_offset = int(len(repeat) / len(self.repeat)) - 1
         self.repeat_hmm = profileHMM(repeat, self.model_file, transition_probs=self.transition_probs, state_prefix=self.state_prefix, 
                                      no_silent=True, std_scale=self.std_scale)
         self.add_model(self.repeat_hmm)
@@ -294,7 +299,7 @@ class repeatHMM(pg.HiddenMarkovModel):
         states = np.array([x[1] for x in states])
         n1 = np.sum(states == self.d1)
         n2 = np.sum(states == self.d2)
-        return n1 + n2 - self.repeat_multiplier
+        return n1 + n2 - self.repeat_offset
 
 
 # repeat detection profile HMM
@@ -319,8 +324,9 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
     def __build_model__(self):
         self.pore_model = pore_model(self.model_file)
         # expand primer sequences and get profile HMMs
-        prefix = self.prefix + self.repeat[:-1]
-        suffix = self.repeat + self.suffix  
+        prefix = self.prefix + ''.join([self.repeat] * int(np.ceil(self.pore_model.kmer / len(self.repeat))))[:-1]
+        suffix = ''.join([self.repeat] * int(np.ceil(self.pore_model.kmer / len(self.repeat)))) + self.suffix
+        self.flanking_count = int(np.ceil(self.pore_model.kmer / len(self.repeat))) * 2 - 1
         self.prefix_model = profileHMM(prefix, self.model_file, self.transition_probs, state_prefix='prefix', std_scale=self.transition_probs['seq_std_scale'])
         self.suffix_model = profileHMM(suffix, self.model_file, self.transition_probs, state_prefix='suffix', std_scale=self.transition_probs['rep_std_scale'])
         self.repeat_model = repeatHMM(self.repeat, self.model_file, self.transition_probs, state_prefix='repeat', std_scale=self.transition_probs['seq_std_scale'])
@@ -345,7 +351,7 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
         p, path = super().viterbi(sequence, **kwargs)
         if path is not None:
             # repeat number equals loops in repeat model + 1 repeat in flanking sequences
-            n = self.repeat_model.count_repeats(path) + 1
+            n = self.repeat_model.count_repeats(path) + self.flanking_count
             path = np.array([x[0] for x in path])
             path = path[path < self.silent_start]
             return n, p, path
@@ -394,33 +400,34 @@ class repeatDetection(object):
         return self.flanked_model.count_repeats(segment)
 
     def detect(self, signal):
-        nrm_signal = sp.medfilt(signal, kernel_size=3) 
-        nrm_signal = (nrm_signal - np.median(nrm_signal)) / np.std(nrm_signal)
+        flt_signal = sp.medfilt(signal, kernel_size=3)
+        nrm_signal = (flt_signal - np.median(flt_signal)) / np.std(flt_signal)
         nrm_signal = np.clip(nrm_signal * 42 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
         flt = rectangle(1, 4)
         nrm_signal = opening(nrm_signal, flt)
         nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
-        nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), clip=True)
+        nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')))
+        flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')))
         trim_prefix = (len(self.sim_prefix2) - len(self.sim_prefix))
         trim_suffix = (len(self.sim_suffix2) - len(self.sim_suffix))
         score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2, pre_trim=trim_prefix)
         score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2, post_trim=trim_suffix)
-        n = 0; p = 0
+        n = 0; p = 0; path = np.array([])
         if prefix_end < suffix_begin:
-            n, p, path = self.detect_short(nrm_signal[prefix_begin:suffix_end])
-        # f, axs = plt.subplots(2, sharex=True)
-        # ax = axs[0]
-        # ax.plot(nrm_signal, 'k-')
-        # ax.plot(np.arange(len(self.sim_prefix2)) + prefix_begin, self.sim_prefix2, 'b-')
-        # ax.plot(np.arange(len(self.sim_suffix2)) + suffix_begin, self.sim_suffix2, 'b-')
-        # ax.axvline(prefix_begin, color='r')
-        # ax.axvline(prefix_end, color='r')
-        # ax.axvline(suffix_begin, color='b')
-        # ax.axvline(suffix_end, color='b')
-        # ax.set_title('Detected ' + str(n) + ' repeats')
-        # ax = axs[1]
-        # ax.plot(np.arange(len(path)) + prefix_begin, path, 'b-')
-        # plt.show()
+            n, p, path = self.detect_short(flt_signal[prefix_begin:suffix_end])
+        f, axs = plt.subplots(2, sharex=True)
+        ax = axs[0]
+        ax.plot(flt_signal, 'k-')
+        ax2 = ax.twinx()
+        ax.plot(nrm_signal, 'k-', alpha=0.3)
+        ax.axvline(prefix_begin, color='r')
+        ax.axvline(prefix_end, color='r')
+        ax.axvline(suffix_begin, color='b')
+        ax.axvline(suffix_end, color='b')
+        ax.set_title('Detected ' + str(n) + ' repeats')
+        ax = axs[1]
+        ax.plot(np.arange(len(path)) + prefix_begin, path, 'b-')
+        plt.show()
         return n, score_prefix, score_suffix, p, suffix_begin - prefix_end, prefix_end
 
 
@@ -470,7 +477,6 @@ def process_detection(config, record_IDs, output_queue, counter):
             f5_record = f5.getRecord(record_ID)
             if f5_record is None:
                 continue
-            raw_signal = f5_record.raw    
             with counter.get_lock():
                     counter.value += 1
             if bed:
@@ -486,17 +492,17 @@ def process_detection(config, record_IDs, output_queue, counter):
                         model = detection[bed_record[0]][1]
                     else:
                         continue
-                n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(raw_signal)
-                if n < 3:
-                    continue
+                n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(f5_record.raw)
+                # if n < 3:
+                    # continue
                 output_queue.put('\t'.join([f5_record.ID, bed_record[0], bed_record[3], str(n), 
                                      str(score_prefix), str(score_suffix), str(log_p), str(ticks), str(offset)]))
             else:
                 for key, value in repeat.items():
                     model = detection[key][0]
-                    n0, score_prefix0, score_suffix0, log_p0, ticks0, offset0 = model.detect(raw_signal)
+                    n0, score_prefix0, score_suffix0, log_p0, ticks0, offset0 = model.detect(f5_record.raw)
                     model = detection[key][1]
-                    n1, score_prefix1, score_suffix1, log_p1, ticks1, offset1 = model.detect(raw_signal)
+                    n1, score_prefix1, score_suffix1, log_p1, ticks1, offset1 = model.detect(f5_record.raw)
                     score0 = score_prefix0 + score_suffix0
                     score1 = score_prefix1 + score_suffix1
                     if score0 > score1 and ticks0 > 0:
