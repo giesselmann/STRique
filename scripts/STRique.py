@@ -18,6 +18,7 @@ import os, sys, json, argparse
 import Bio.Seq
 import signal
 import queue
+import itertools
 import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
@@ -73,34 +74,54 @@ class pore_model():
     def MAD(self, signal):
         return np.mean(np.absolute(np.subtract(signal, np.median(signal))))
 
-    def normalize2model(self, signal, clip=True, mask=True):
-        if mask:
+    def normalize2model(self, signal, clip=True, mode='median', plot=False):
+        if mode == 'minmax':
+            model_values = np.array([x[0] for x in self.model_dict.values()])
+            q5_sig, q95_sig = np.percentile(signal, [1, 99])
+            q5_mod, q95_mod = np.percentile(model_values, [1, 99])
+            m5_sig = np.median(signal[signal < q5_sig])
+            m95_sig = np.median(signal[signal > q95_sig])
+            m5_mod = np.median(model_values[model_values < q5_mod])
+            m95_mod = np.median(model_values[model_values > q95_mod])
+            nrm_signal = (signal - (m5_sig + (m95_sig - m5_sig) / 2)) / ((m95_sig - m5_sig) / 2)
+            nrm_signal = nrm_signal * ((m95_mod - m5_mod) / 2) + (m5_mod + (m95_mod - m5_mod) / 2)
+        elif mode == 'entropy':
             #sliding_std = [np.std(x) for x in sliding_window(signal, n=1000, mode='mirror')]
             sliding_std = [self.MAD(x) for x in sliding_window(signal, n=500, mode='mirror')]
             sliding_std += [sliding_std[-1]]
             diff_signal = np.abs(np.diff(sliding_std))
-            ind = np.argpartition(diff_signal, -100)[-100:]
+            ind = np.argpartition(diff_signal, -50)[-50:]
             # q = np.percentile(diff_signal, 97)  # 99.5
             # diff_mask = np.array([0 if x < q else 1 for x in diff_signal], dtype=np.dtype('uint8'))
             diff_mask = np.zeros(len(diff_signal), dtype=np.dtype('uint8'))
             diff_mask[ind] = 1
             diff_mask = dilation(diff_mask.reshape((1, len(diff_mask))), rectangle(1, 750))[0].astype(np.bool)
             rawMedian = np.median(signal[diff_mask])
-            rawMAD = np.mean(np.absolute(np.subtract(signal[diff_mask], rawMedian)))
+            rawMAD = self.MAD(signal[diff_mask])
+            nrm_signal = np.divide(np.subtract(signal, rawMedian), rawMAD)
+            nrm_signal = np.add(np.multiply(nrm_signal, self.model_MAD), self.model_median)
         else:
             rawMedian = np.median(signal)
-            rawMAD = np.mean(np.absolute(np.subtract(signal, rawMedian)))
-        nrm_signal = np.divide(np.subtract(signal, rawMedian), rawMAD)
-        nrm_signal = np.add(np.multiply(nrm_signal, self.model_MAD), self.model_median)
+            rawMAD = self.MAD(signal)
+            nrm_signal = np.divide(np.subtract(signal, rawMedian), rawMAD)
+            nrm_signal = np.add(np.multiply(nrm_signal, self.model_MAD), self.model_median)
         if clip == True:
             np.clip(nrm_signal, self.model_min + .5, self.model_max - .5, out=nrm_signal)
-        # if mask:
+        #if mask and plot:
             # f, ax = plt.subplots(3, sharex=True)
             # ax[0].plot(nrm_signal, 'k-')
             # ax[0].axhline(rawMedian, color='r')
             # ax[0].axhline(np.median(signal), color='g')
             # ax[1].plot(diff_mask, 'k-')
             # ax[2].plot(diff_signal, 'k-')
+            # plt.show()
+            # f, ax = plt.subplots(3, sharex=False)
+            # bins = np.linspace(self.model_min, self.model_max, 75)
+            # ax[0].plot(nrm_signal, 'b-')
+            # ax[1].hist(nrm_signal, bins=bins)
+            # ax[1].hold(False)
+            # ax[2].hist([x[0] for x in self.model_dict.values()], bins=bins)
+            # ax[0].callbacks.connect('xlim_changed', lambda axes, ax1=ax[1], nrm_signal=nrm_signal, bins=bins: ax1.hist(nrm_signal[max([int(axes.get_xlim()[0]), 0]) : int(axes.get_xlim()[1])], bins=bins))
             # plt.show()
         return nrm_signal
 
@@ -388,7 +409,6 @@ class repeatDetection(object):
     def __init__(self, model_file,
                  repeat, prefix, suffix,
                  prefix2=None, suffix2=None, align_config=None, HMM_config=None):
-        self.algn = pyseqan.align_raw()
         default_config =  {'dist_offset': 8.0,
                              'dist_min': -8.0,
                              'gap_open': -2.0,
@@ -396,11 +416,14 @@ class repeatDetection(object):
                              'samples': 9}
         if align_config and isinstance(align_config, dict):
             for key, value in align_config.items():
-                default_config[key] = value            
+                default_config[key] = value
+        self.algn = pyseqan.align_raw()
         self.algn.dist_offset = default_config['dist_offset']
-        self.algn.gap_open = default_config['gap_open']
-        self.algn.gap_extension = default_config['gap_extension']
         self.algn.dist_min = default_config['dist_min']
+        self.algn.gap_open_h = default_config['gap_open_h']
+        self.algn.gap_open_v = default_config['gap_open_v']
+        self.algn.gap_extension_h = default_config['gap_extension_h']
+        self.algn.gap_extension_v = default_config['gap_extension_v']
         self.pm = pore_model(model_file)
         if not prefix2:
             prefix2 = prefix
@@ -415,6 +438,14 @@ class repeatDetection(object):
 
     def detect_range(self, signal, segment, pre_trim=0, post_trim=0):
         score, idx_signal, idx_segment = self.algn.align_overlap(signal, segment)
+        # f, ax = plt.subplots(1)
+        # ax.plot(idx_signal, signal, 'k-')
+        # ax.plot(idx_segment, segment, 'b-')
+        # plt.show()
+        segment_begin = np.abs(np.array(idx_signal) - idx_segment[0]).argmin()
+        segment_end = np.abs(np.array(idx_signal) - idx_segment[-1]).argmin()
+        score = score / (segment_end - segment_begin)
+        # trim
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0 + pre_trim]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1 - post_trim]).argmin()
         return score, segment_begin, segment_end
@@ -424,15 +455,15 @@ class repeatDetection(object):
 
     def detect(self, signal):
         flt_signal = sp.medfilt(signal, kernel_size=3)
-        nrm_signal = (flt_signal - np.median(flt_signal)) / np.std(flt_signal)
-        nrm_signal = np.clip(nrm_signal * 42 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
-        flt = rectangle(1, 4)
+        nrm_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
+        nrm_signal = np.clip(nrm_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
+        flt = rectangle(1, 6)
         nrm_signal = opening(nrm_signal, flt)
         nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
-        nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')))
-        flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')))
-        trim_prefix = (len(self.sim_prefix2) - len(self.sim_prefix))
-        trim_suffix = (len(self.sim_suffix2) - len(self.sim_suffix))
+        nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), mode='minmax', plot=True)
+        flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')), mode='minmax')
+        trim_prefix = len(self.sim_prefix2) - len(self.sim_prefix)
+        trim_suffix = len(self.sim_suffix2) - len(self.sim_suffix)
         score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2, pre_trim=trim_prefix)
         score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2, post_trim=trim_suffix)
         n = 0; p = 0; path = np.array([])
@@ -445,6 +476,8 @@ class repeatDetection(object):
         # ax.plot(nrm_signal, 'k-', alpha=0.3)
         # ax.axvline(prefix_begin, color='r')
         # ax.axvline(prefix_end, color='r')
+        # ax.axvline(prefix_symbol_begin, color='lime')
+        # ax.axvline(suffix_symbol_end, color='lime')
         # ax.axvline(suffix_begin, color='b')
         # ax.axvline(suffix_end, color='b')
         # ax.set_title('Detected ' + str(n) + ' repeats')
