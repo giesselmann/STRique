@@ -33,8 +33,10 @@ using namespace seqan;
 template<typename TScore>
 struct align_raw_settings
 {
-    TScore m_gap_open = static_cast<TScore>(-2.0L);
-    TScore m_gap_extension = static_cast<TScore>(-8.0L);
+    TScore m_gap_open_h = static_cast<TScore>(-2.0L);
+    TScore m_gap_open_v = static_cast<TScore>(-2.0L);
+    TScore m_gap_extension_h = static_cast<TScore>(-8.0L);
+    TScore m_gap_extension_v = static_cast<TScore>(-8.0L);
     TScore m_dist_offset = static_cast<TScore>(8.0L);
     TScore m_dist_min = static_cast<TScore>(-16.0);
 };
@@ -61,11 +63,20 @@ public:
     virtual ~align_raw() {};
 
     // getter and setter
-    void set_gap_open(const TScore gap_open) { m_gap_open = gap_open; }
-    const TScore get_gap_open(void) const { return m_gap_open; }
-
-    void set_gap_extension(const TScore gap_extension) { m_gap_extension = gap_extension; }
-    const TScore get_gap_extension(void) const { return m_gap_extension; }
+    void set_gap_open(const TScore gap_open) { m_gap_open_h = gap_open; m_gap_open_v = gap_open; }
+    const TScore get_gap_open(void) const { return m_gap_open_h; }
+    void set_gap_extension(const TScore gap_extension) { m_gap_extension_h = gap_extension; m_gap_extension_v = gap_extension; }
+    const TScore get_gap_extension(void) const { return m_gap_extension_h; }
+    
+    void set_gap_open_h(const TScore gap_open) { m_gap_open_h = gap_open; }
+    const TScore get_gap_open_h(void) const { return m_gap_open_h; }
+    void set_gap_extension_h(const TScore gap_extension) { m_gap_extension_h = gap_extension; }
+    const TScore get_gap_extension_h(void) const { return m_gap_extension_h; }
+    
+    void set_gap_open_v(const TScore gap_open) { m_gap_open_v = gap_open; }
+    const TScore get_gap_open_v(void) const { return m_gap_open_v; }
+    void set_gap_extension_v(const TScore gap_extension) { m_gap_extension_v = gap_extension; }
+    const TScore get_gap_extension_v(void) const { return m_gap_extension_v; }
 
     void set_dist_offset(const TScore dist_offset) { m_dist_offset = dist_offset; }
     const TScore get_dist_offset(void) const { return m_dist_offset; }
@@ -102,7 +113,7 @@ public:
         resize(rows(algn), 2);
         assignSource(row(algn, 0), a);
         assignSource(row(algn, 1), b);
-        auto score = globalAlignment(algn, Score<TScore, Distance>(m_gap_extension, m_gap_open, m_dist_offset, m_dist_min),
+        auto score = globalAlignment(algn, Score<TScore, Distance>(m_gap_extension_h, m_gap_extension_v, m_gap_open_h, m_gap_open_v, m_dist_offset, m_dist_min),
             AlignConfig<a_gap, b_gap, b_gap, a_gap>(), AffineGaps());
         TRow & row1 = row(algn, 0);
         TRow & row2 = row(algn, 1);
@@ -141,15 +152,19 @@ private:
     // init
     void init(align_raw_settings<TScore> const& settings)
     {
-        m_gap_open = settings.m_gap_open;
-        m_gap_extension = settings.m_gap_extension;
+        m_gap_open_h = settings.m_gap_open_h;
+        m_gap_open_v = settings.m_gap_open_v;
+        m_gap_extension_h = settings.m_gap_extension_h;
+        m_gap_extension_v = settings.m_gap_extension_v;
         m_dist_offset = settings.m_dist_offset;
         m_dist_min = settings.m_dist_min;
     }
     
     // member
-    TScore m_gap_open;
-    TScore m_gap_extension;
+    TScore m_gap_open_h;
+    TScore m_gap_open_v;
+    TScore m_gap_extension_h;
+    TScore m_gap_extension_v;
     TScore m_dist_offset;
     TScore m_dist_min;
 };
