@@ -102,7 +102,7 @@ namespace seqan
     score(Score<TValue, Distance> const & me, TSeqHVal valH, TSeqVVal valV)
     {
         //TValue score = me.data_dist_offset - static_cast<TValue>(valH > valV ? valH - valV : valV - valH);
-        TValue score = me.data_dist_offset - static_cast<TValue>(pow(valH > valV ? valH - valV : valV - valH, 1.5));
+        TValue score = me.data_dist_offset - static_cast<TValue>(pow(valH > valV ? valH - valV : valV - valH, 1.2));
         return score > me.data_dist_min ? score : me.data_dist_min;
     }
     
