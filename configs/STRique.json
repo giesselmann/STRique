@@ -1,32 +1,32 @@
 {
 	"align":
 	{
-		"samples": 4,
-		"dist_offset": 24.0,
-		"dist_min": -0.0,
-		"gap_open_h": -2.0,
-		"gap_open_v": -32.0,
-		"gap_extension_h": -100.0,
-		"gap_extension_v": -8.0
+		"samples": 6,
+		"dist_offset": 16.0,
+		"dist_min": 0.0,
+		"gap_open_h": -1.0,
+		"gap_open_v": -16.0,
+		"gap_extension_h": -1.0,
+		"gap_extension_v": -16.0
 	},
 	"HMM":
 	{
 		"leave_repeat": 0.002,
 		"e1_ratio": 0.1,
-		"seq_std_scale": 0.0,
-		"rep_std_scale": 0.0,
-		"seq_std_offset": 2.5,
-		"rep_std_offset": 2.5,
-		"match_loop": 0.50,
-		"match_match": 0.25,
-		"match_insert": 0.20,
-		"match_delete": 0.05,
+		"seq_std_scale": 1.0,
+		"rep_std_scale": 1.0,
+		"seq_std_offset": 0.0,
+		"rep_std_offset": 0.0,
+		"match_loop": 0.75,
+		"match_match": 0.15,
+		"match_insert": 0.09,
+		"match_delete": 0.01,
 		"insert_loop" : 0.15,
 		"insert_match_0": 0.40,
 		"insert_match_1": 0.40,
 		"insert_delete": 0.05,
 		"delete_delete": 0.005,
 		"delete_insert": 0.05,
-		"delete_match": 0.945 
+		"delete_match": 0.945
 	}
 }
