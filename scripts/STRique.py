@@ -131,6 +131,8 @@ class pore_model():
         return np.repeat(level_means, samples)
 
 
+
+
 # parse bed file
 class bed_parser():
     def __init__(self, bedFile):
@@ -166,10 +168,10 @@ class profileHMM(pg.HiddenMarkovModel):
         self.no_silent = no_silent
         self.std_scale = std_scale
         self.std_offset = std_offset
-        self.transition_probs = {'match_loop': .50,     #
-                                 'match_match': .25,    # sum to 1
-                                 'match_insert': .20,   #
-                                 'match_delete': .05,   #
+        self.transition_probs = {'match_loop': .75,     #
+                                 'match_match': .15,    # sum to 1
+                                 'match_insert': .09,   #
+                                 'match_delete': .01,   #
 
                                  'insert_loop' : .15,   #
                                  'insert_match_0': .40, # sum to 1
@@ -278,7 +280,7 @@ class repeatHMM(pg.HiddenMarkovModel):
                                  # 'loop_insert' : .30,
                                  # 'delete': .002}
         self.transition_probs = {'skip': .999,   # 99
-                                 'leave_repeat': .000002
+                                 'leave_repeat': .002
                                  }
         for key, value in transition_probs.items():
             self.transition_probs[key] = value
@@ -352,8 +354,8 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
         self.transition_probs = {'skip': 1-1e-4,
                                  'seq_std_scale': 1.0,
                                  'rep_std_scale': 1.0,
-                                 'seq_std_offset': 4.0,
-                                 'rep_std_offset': 5.0,
+                                 'seq_std_offset': 0.0,
+                                 'rep_std_offset': 0.0,
                                  'e1_ratio': 0.1}
         if config and isinstance(config, dict):
             for key, value in config.items():
@@ -409,11 +411,13 @@ class repeatDetection(object):
     def __init__(self, model_file,
                  repeat, prefix, suffix,
                  prefix2=None, suffix2=None, align_config=None, HMM_config=None):
-        default_config =  {'dist_offset': 8.0,
-                             'dist_min': -8.0,
-                             'gap_open': -2.0,
-                             'gap_extension': -8.0,
-                             'samples': 9}
+        default_config =  {'dist_offset': 16.0,
+                             'dist_min': 0.0,
+                             'gap_open_h': -1.0,
+                             'gap_open_v': -16.0,
+                             'gap_extension_h': -1.0,
+                             'gap_extension_v': -16.0,
+                             'samples': 6}
         if align_config and isinstance(align_config, dict):
             for key, value in align_config.items():
                 default_config[key] = value
@@ -436,15 +440,16 @@ class repeatDetection(object):
         self.sim_suffix2 = self.pm.generate_signal(suffix2, samples=self.samples)
         self.flanked_model = embeddedRepeatHMM(repeat, prefix, suffix, model_file, HMM_config)
 
-    def detect_range(self, signal, segment, pre_trim=0, post_trim=0):
+    def detect_range(self, signal, segment, pre_trim=0, post_trim=0, strand='+'):
         score, idx_signal, idx_segment = self.algn.align_overlap(signal, segment)
-        # f, ax = plt.subplots(1)
-        # ax.plot(idx_signal, signal, 'k-')
-        # ax.plot(idx_segment, segment, 'b-')
-        # plt.show()
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1]).argmin()
         score = score / (segment_end - segment_begin)
+        # f, ax = plt.subplots(1)
+        # ax.plot(idx_signal, signal, 'k-')
+        # ax.plot(idx_segment, segment, 'b-')
+        # ax.set_title('Score: ' + str(score) + ' ' + strand)
+        # plt.show()
         # trim
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0 + pre_trim]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1 - post_trim]).argmin()
@@ -453,37 +458,36 @@ class repeatDetection(object):
     def detect_short(self, segment):
         return self.flanked_model.count_repeats(segment)
 
-    def detect(self, signal):
+    def detect(self, signal, strand, record_ID):
         flt_signal = sp.medfilt(signal, kernel_size=3)
         nrm_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
         nrm_signal = np.clip(nrm_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
-        flt = rectangle(1, 6)
+        flt = rectangle(1, 8)
         nrm_signal = opening(nrm_signal, flt)
         nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
         nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), mode='minmax', plot=True)
         flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')), mode='minmax')
         trim_prefix = len(self.sim_prefix2) - len(self.sim_prefix)
         trim_suffix = len(self.sim_suffix2) - len(self.sim_suffix)
-        score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2, pre_trim=trim_prefix)
-        score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2, post_trim=trim_suffix)
+        score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2, pre_trim=trim_prefix, strand=strand)
+        score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2, post_trim=trim_suffix, strand=strand)
         n = 0; p = 0; path = np.array([])
         if prefix_end < suffix_begin:
             n, p, path = self.detect_short(flt_signal[prefix_begin:suffix_end])
-        # f, axs = plt.subplots(2, sharex=True)
-        # ax = axs[0]
-        # ax.plot(flt_signal, 'k-')
-        # ax2 = ax.twinx()
-        # ax.plot(nrm_signal, 'k-', alpha=0.3)
-        # ax.axvline(prefix_begin, color='r')
-        # ax.axvline(prefix_end, color='r')
-        # ax.axvline(prefix_symbol_begin, color='lime')
-        # ax.axvline(suffix_symbol_end, color='lime')
-        # ax.axvline(suffix_begin, color='b')
-        # ax.axvline(suffix_end, color='b')
-        # ax.set_title('Detected ' + str(n) + ' repeats')
-        # ax = axs[1]
-        # ax.plot(np.arange(len(path)) + prefix_begin, path, 'b-')
-        # plt.show()
+        # if n == 0:
+            # f, axs = plt.subplots(2, sharex=True)
+            # ax = axs[0]
+            # ax.plot(flt_signal, 'k-')
+            # ax2 = ax.twinx()
+            # ax.plot(nrm_signal, 'k-', alpha=0.3)
+            # ax.axvline(prefix_begin, color='r')
+            # ax.axvline(prefix_end, color='r')
+            # ax.axvline(suffix_begin, color='b')
+            # ax.axvline(suffix_end, color='b')
+            # ax.set_title('Detected ' + str(n) + ' repeats ' + record_ID)
+            # ax = axs[1]
+            # ax.plot(np.arange(len(path)) + prefix_begin, path, 'b-')
+            # plt.show()
         return n, score_prefix, score_suffix, p, suffix_begin - prefix_end, prefix_end
 
 
@@ -550,7 +554,7 @@ def process_detection(config, record_IDs, output_queue, counter):
                         model = detection[bed_record[0]][1]
                     else:
                         continue
-                n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(f5_record.raw)
+                n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(f5_record.raw, bed_record[3], record_ID)
                 # if n < 3:
                     # continue
                 output_queue.put('\t'.join([f5_record.ID, bed_record[0], bed_record[3], str(n), 
@@ -558,9 +562,9 @@ def process_detection(config, record_IDs, output_queue, counter):
             else:
                 for key, value in repeat.items():
                     model = detection[key][0]
-                    n0, score_prefix0, score_suffix0, log_p0, ticks0, offset0 = model.detect(f5_record.raw)
+                    n0, score_prefix0, score_suffix0, log_p0, ticks0, offset0 = model.detect(f5_record.raw, bed_record[3])
                     model = detection[key][1]
-                    n1, score_prefix1, score_suffix1, log_p1, ticks1, offset1 = model.detect(f5_record.raw)
+                    n1, score_prefix1, score_suffix1, log_p1, ticks1, offset1 = model.detect(f5_record.raw, bed_record[3])
                     score0 = score_prefix0 + score_suffix0
                     score1 = score_prefix1 + score_suffix1
                     if score0 > score1 and ticks0 > 0:
