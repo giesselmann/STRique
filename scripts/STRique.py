@@ -440,16 +440,11 @@ class repeatDetection(object):
         self.sim_suffix2 = self.pm.generate_signal(suffix2, samples=self.samples)
         self.flanked_model = embeddedRepeatHMM(repeat, prefix, suffix, model_file, HMM_config)
 
-    def detect_range(self, signal, segment, pre_trim=0, post_trim=0, strand='+'):
+    def detect_range(self, signal, segment, pre_trim=0, post_trim=0):
         score, idx_signal, idx_segment = self.algn.align_overlap(signal, segment)
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1]).argmin()
         score = score / (segment_end - segment_begin)
-        # f, ax = plt.subplots(1)
-        # ax.plot(idx_signal, signal, 'k-')
-        # ax.plot(idx_segment, segment, 'b-')
-        # ax.set_title('Score: ' + str(score) + ' ' + strand)
-        # plt.show()
         # trim
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0 + pre_trim]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1 - post_trim]).argmin()
@@ -458,7 +453,7 @@ class repeatDetection(object):
     def detect_short(self, segment):
         return self.flanked_model.count_repeats(segment)
 
-    def detect(self, signal, strand, record_ID):
+    def detect(self, signal, record_ID=''):
         flt_signal = sp.medfilt(signal, kernel_size=3)
         nrm_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
         nrm_signal = np.clip(nrm_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
@@ -469,8 +464,8 @@ class repeatDetection(object):
         flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')), mode='minmax')
         trim_prefix = len(self.sim_prefix2) - len(self.sim_prefix)
         trim_suffix = len(self.sim_suffix2) - len(self.sim_suffix)
-        score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2, pre_trim=trim_prefix, strand=strand)
-        score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2, post_trim=trim_suffix, strand=strand)
+        score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2, pre_trim=trim_prefix)
+        score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2, post_trim=trim_suffix)
         n = 0; p = 0; path = np.array([])
         if prefix_end < suffix_begin:
             n, p, path = self.detect_short(flt_signal[prefix_begin:suffix_end])
