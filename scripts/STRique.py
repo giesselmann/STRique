@@ -15,7 +15,7 @@
 # -----------------------------------------------------------------------
 # public imports
 import os, sys, json, argparse
-import Bio.Seq
+import re
 import signal
 import queue
 import itertools
@@ -23,30 +23,16 @@ import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
 import pomegranate as pg
-from skimage.morphology import opening, closing, dilation, erosion, rectangle
 import matplotlib.pyplot as plt
+from signal import signal, SIGPIPE, SIG_DFL
+from collections import namedtuple, defaultdict
+from skimage.morphology import opening, closing, dilation, erosion, rectangle
 from multiprocessing import Pool, Process, Event, Value, Queue
 
 
 # private imports
 import fast5Index
 import pyseqan
-
-
-
-
-def sliding_window(a, n=3, mode='same'):
-    if mode == 'mean':
-        a = np.append(a, (n-1) * [np.mean(a)])
-    elif mode == 'median':
-        a = np.append(a, (n-1) * [np.median(a)])
-    elif mode == 'mirror':
-        a = np.append(a, a[-1:-1-(n-1):-1])
-    else:
-        a = np.append(a, (n-1) * [a[-1]])
-    shape = a.shape[:-1] + (a.shape[-1] - n + 1, n)
-    strides = a.strides + (a.strides[-1],)
-    return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
 
 
 
@@ -71,6 +57,19 @@ class pore_model():
         self.model_max = max_state[0] + 6 * max_state[1]
         self.model_dict = model_dict
         
+    def __sliding_window__(a, n=3, mode='same'):
+        if mode == 'mean':
+            a = np.append(a, (n-1) * [np.mean(a)])
+        elif mode == 'median':
+            a = np.append(a, (n-1) * [np.median(a)])
+        elif mode == 'mirror':
+            a = np.append(a, a[-1:-1-(n-1):-1])
+        else:
+            a = np.append(a, (n-1) * [a[-1]])
+        shape = a.shape[:-1] + (a.shape[-1] - n + 1, n)
+        strides = a.strides + (a.strides[-1],)
+        return np.lib.stride_tricks.as_strided(a, shape=shape, strides=strides)
+        
     def MAD(self, signal):
         return np.mean(np.absolute(np.subtract(signal, np.median(signal))))
 
@@ -86,8 +85,8 @@ class pore_model():
             nrm_signal = (signal - (m5_sig + (m95_sig - m5_sig) / 2)) / ((m95_sig - m5_sig) / 2)
             nrm_signal = nrm_signal * ((m95_mod - m5_mod) / 2) + (m5_mod + (m95_mod - m5_mod) / 2)
         elif mode == 'entropy':
-            #sliding_std = [np.std(x) for x in sliding_window(signal, n=1000, mode='mirror')]
-            sliding_std = [self.MAD(x) for x in sliding_window(signal, n=500, mode='mirror')]
+            #sliding_std = [np.std(x) for x in self.__sliding_window__(signal, n=1000, mode='mirror')]
+            sliding_std = [self.MAD(x) for x in self.__sliding_window__(signal, n=500, mode='mirror')]
             sliding_std += [sliding_std[-1]]
             diff_signal = np.abs(np.diff(sliding_std))
             ind = np.argpartition(diff_signal, -50)[-50:]
@@ -129,27 +128,6 @@ class pore_model():
         signal = []
         level_means = np.array([self.__model[kmer][0] for kmer in [sequence[i:i+self.kmer] for i in range(len(sequence)-self.kmer + 1)]])
         return np.repeat(level_means, samples)
-
-
-
-
-# parse bed file
-class bed_parser():
-    def __init__(self, bedFile):
-        self.records = {}
-        with open(bedFile, 'r') as fp:
-            for line in fp:
-                if line:
-                    cols = line.strip().split()
-                    if len(cols) >= 6:
-                        chr, start, stop, name, val, strand = cols[:6]
-                        self.records[name] = (chr, int(start), int(stop), strand)
-        
-    def __getitem__(self, key): 
-        if key in self.records:
-            return self.records[key]
-        else:
-            return None
 
 
 
@@ -268,18 +246,11 @@ class profileHMM(pg.HiddenMarkovModel):
 
 # repeat count profile HMM
 class repeatHMM(pg.HiddenMarkovModel):
-    def __init__(self, repeat, model_file, transition_probs={}, state_prefix='', std_scale=1.0, std_offset=0.0):
+    def __init__(self, repeat, pm, transition_probs={}, state_prefix='', std_scale=1.0, std_offset=0.0):
         super().__init__()
         self.repeat = repeat
-        self.model_file = model_file
-        # self.transition_probs = {'skip': .999,   # 99
-                                 # 'leave_repeat': .0002,
-                                 # 'loop': .95,
-                                 # 'move': .042,
-                                 # 'insert': .006,
-                                 # 'loop_insert' : .30,
-                                 # 'delete': .002}
-        self.transition_probs = {'skip': .999,   # 99
+        self.pore_model = pm
+        self.transition_probs = {'skip': .999,
                                  'leave_repeat': .002
                                  }
         for key, value in transition_probs.items():
@@ -290,7 +261,6 @@ class repeatHMM(pg.HiddenMarkovModel):
         self.__build_model__()
 
     def __build_model__(self):
-        self.pore_model = pore_model(self.model_file)
         if len(self.repeat) >= self.pore_model.kmer:
             repeat = self.repeat + self.repeat[: self.pore_model.kmer - 1]
             self.repeat_offset = 0
@@ -346,10 +316,10 @@ class repeatHMM(pg.HiddenMarkovModel):
 
 
 # repeat detection profile HMM
-class embeddedRepeatHMM(pg.HiddenMarkovModel):
+class flankedRepeatHMM(pg.HiddenMarkovModel):
     def __init__(self, repeat, 
                  prefix, suffix,
-                 model_file, config=None):
+                 pm, config=None):
         super().__init__()
         self.transition_probs = {'skip': 1-1e-4,
                                  'seq_std_scale': 1.0,
@@ -360,21 +330,23 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
         if config and isinstance(config, dict):
             for key, value in config.items():
                 self.transition_probs[key] = value
-        self.model_file = model_file
+        self.pore_model = pm
         self.repeat = repeat
         self.prefix = prefix
         self.suffix = suffix
         self.__build_model__()
+        
+    def free_bake_buffers(self):
+        super().free_bake_buffers()
 
-    def __build_model__(self):
-        self.pore_model = pore_model(self.model_file)
+    def __build_model__(self): 
         # expand primer sequences and get profile HMMs
         prefix = self.prefix + ''.join([self.repeat] * int(np.ceil(self.pore_model.kmer / len(self.repeat))))[:-1]
         suffix = ''.join([self.repeat] * int(np.ceil(self.pore_model.kmer / len(self.repeat)))) + self.suffix
         self.flanking_count = int(np.ceil(self.pore_model.kmer / len(self.repeat))) * 2 - 1
         self.prefix_model = profileHMM(prefix, self.pore_model, self.transition_probs, state_prefix='prefix', std_scale=self.transition_probs['seq_std_scale'], std_offset=self.transition_probs['seq_std_offset'])
         self.suffix_model = profileHMM(suffix, self.pore_model, self.transition_probs, state_prefix='suffix', std_scale=self.transition_probs['rep_std_scale'], std_offset=self.transition_probs['seq_std_offset'])
-        self.repeat_model = repeatHMM(self.repeat, self.model_file, self.transition_probs, state_prefix='repeat', std_scale=self.transition_probs['seq_std_scale'], std_offset=self.transition_probs['rep_std_offset'])
+        self.repeat_model = repeatHMM(self.repeat, self.pore_model, self.transition_probs, state_prefix='repeat', std_scale=self.transition_probs['seq_std_scale'], std_offset=self.transition_probs['rep_std_offset'])
         # add sub-modules, flanking and skip states
         self.add_model(self.prefix_model)
         self.add_model(self.repeat_model)
@@ -389,7 +361,7 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
         self.add_transition(self.repeat_model.e2, self.suffix_model.s2, 1)
         self.add_transition(self.suffix_model.e1, self.end, 1)
         self.add_transition(self.suffix_model.e2, self.end, 1)
-        # bake and store state IDs 
+        # bake and store state IDs
         self.bake(merge='All')
 
     def count_repeats(self, sequence, **kwargs):
@@ -407,10 +379,8 @@ class embeddedRepeatHMM(pg.HiddenMarkovModel):
 
 
 # main repeat detection methods
-class repeatDetection(object):
-    def __init__(self, model_file,
-                 repeat, prefix, suffix,
-                 prefix2=None, suffix2=None, align_config=None, HMM_config=None):
+class repeatCounter(object):
+    def __init__(self, model_file, align_config=None, HMM_config=None):
         default_config =  {'dist_offset': 16.0,
                              'dist_min': 0.0,
                              'gap_open_h': -1.0,
@@ -429,186 +399,294 @@ class repeatDetection(object):
         self.algn.gap_extension_h = default_config['gap_extension_h']
         self.algn.gap_extension_v = default_config['gap_extension_v']
         self.pm = pore_model(model_file)
-        if not prefix2:
-            prefix2 = prefix
-        if not suffix2:
-            suffix2 = suffix
         self.samples = default_config['samples']
-        self.sim_prefix = self.pm.generate_signal(prefix, samples=self.samples)
-        self.sim_suffix = self.pm.generate_signal(suffix, samples=self.samples)
-        self.sim_prefix2 = self.pm.generate_signal(prefix2, samples=self.samples)
-        self.sim_suffix2 = self.pm.generate_signal(suffix2, samples=self.samples)
-        self.flanked_model = embeddedRepeatHMM(repeat, prefix, suffix, model_file, HMM_config)
+        self.HMM_config = HMM_config
+        self.targets = {}
+        self.target_classifier = namedtuple('target_classifier', field_names=['prefix', 'suffix', 'prefix_ext', 'suffix_ext', 'repeatHMM'])
+        
+    def __reverse_complement__(self, sequence):
+        complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
+        return "".join(complement.get(base, base) for base in reversed(sequence))
 
-    def detect_range(self, signal, segment, pre_trim=0, post_trim=0):
+    def __detect_range__(self, signal, segment, pre_trim=0, post_trim=0):
         score, idx_signal, idx_segment = self.algn.align_overlap(signal, segment)
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1]).argmin()
         score = score / (segment_end - segment_begin)
-        # trim
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0 + pre_trim]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1 - post_trim]).argmin()
         return score, segment_begin, segment_end
 
-    def detect_short(self, segment):
-        return self.flanked_model.count_repeats(segment)
-
-    def detect(self, signal, record_ID=''):
-        flt_signal = sp.medfilt(signal, kernel_size=3)
-        nrm_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
-        nrm_signal = np.clip(nrm_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
-        flt = rectangle(1, 8)
-        nrm_signal = opening(nrm_signal, flt)
-        nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
-        nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), mode='minmax', plot=True)
-        flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')), mode='minmax')
-        trim_prefix = len(self.sim_prefix2) - len(self.sim_prefix)
-        trim_suffix = len(self.sim_suffix2) - len(self.sim_suffix)
-        score_prefix, prefix_begin, prefix_end = self.detect_range(nrm_signal, self.sim_prefix2, pre_trim=trim_prefix)
-        score_suffix, suffix_begin, suffix_end = self.detect_range(nrm_signal, self.sim_suffix2, post_trim=trim_suffix)
-        n = 0; p = 0; path = np.array([])
-        if prefix_end < suffix_begin:
-            n, p, path = self.detect_short(flt_signal[prefix_begin:suffix_end])
-        # if n == 0:
-            # f, axs = plt.subplots(2, sharex=True)
-            # ax = axs[0]
-            # ax.plot(flt_signal, 'k-')
-            # ax2 = ax.twinx()
-            # ax.plot(nrm_signal, 'k-', alpha=0.3)
-            # ax.axvline(prefix_begin, color='r')
-            # ax.axvline(prefix_end, color='r')
-            # ax.axvline(suffix_begin, color='b')
-            # ax.axvline(suffix_end, color='b')
-            # ax.set_title('Detected ' + str(n) + ' repeats ' + record_ID)
-            # ax = axs[1]
-            # ax.plot(np.arange(len(path)) + prefix_begin, path, 'b-')
-            # plt.show()
-        return n, score_prefix, score_suffix, p, suffix_begin - prefix_end, prefix_end
-
-
-
-
-# main repeat detection worker
-def process_detection(config, record_IDs, output_queue, counter):
-    try:
-        # load config
-        fast5_dir=config['fast5_dir']
-        bed_file=config['bed_file']
-        model_file=config['model_file']
-        repeat=config['repeat']
-        prefix=config['prefix']
-        suffix=config['suffix']
-        prefix2=config['prefix2']
-        suffix2=config['suffix2']
-        # init
-        assert(isinstance(repeat, dict))
-        assert(isinstance(prefix, dict))
-        assert(isinstance(suffix, dict))
-        bed = None
-        if bed_file:
-            bed = bed_parser(bed_file)
-        f5 = fast5Index.fast5Index()
-        f5.load(fast5_dir)
-        pm = pore_model(model_file)
-        # init profile HMMs, simulate signals
-        detection = {}
-        for key, value in repeat.items():
-            detection[key] = (repeatDetection(model_file=model_file,
-                                               repeat=value, 
-                                               prefix=prefix[key], 
-                                               suffix=suffix[key], 
-                                               prefix2=prefix2[key],
-                                               suffix2=suffix2[key],
-                                               align_config=config['align'], HMM_config=config['HMM']),
-                               repeatDetection(model_file=model_file,
-                                               repeat=Bio.Seq.reverse_complement(value), 
-                                               prefix=Bio.Seq.reverse_complement(suffix[key]),
-                                               suffix=Bio.Seq.reverse_complement(prefix[key]),
-                                               prefix2=Bio.Seq.reverse_complement(suffix2[key]),
-                                               suffix2=Bio.Seq.reverse_complement(prefix2[key]),
-                                               align_config=config['align'], HMM_config=config['HMM'])
-                               )
-
-        # analyze each read
-        for record_ID in record_IDs:
-            f5_record = f5.getRecord(record_ID)
-            if f5_record is None:
-                continue
-            with counter.get_lock():
-                    counter.value += 1
-            if bed:
-                bed_record = bed[record_ID]
-                if not bed_record:
-                    continue
-                if not bed_record[0] in detection:
-                    continue
-                else:
-                    if bed_record[3] == '+':
-                        model = detection[bed_record[0]][0]
-                    elif bed_record[3] == '-':
-                        model = detection[bed_record[0]][1]
-                    else:
-                        continue
-                n, score_prefix, score_suffix, log_p, ticks, offset = model.detect(f5_record.raw, bed_record[3], record_ID)
-                # if n < 3:
-                    # continue
-                output_queue.put('\t'.join([f5_record.ID, bed_record[0], bed_record[3], str(n), 
-                                     str(score_prefix), str(score_suffix), str(log_p), str(ticks), str(offset)]))
+    def __detect_short__(self, flanked_model, segment):
+        return flanked_model.count_repeats(segment)
+        
+    def add_target(self, target_name, repeat, prefix, suffix):
+        if not target_name in self.targets:
+            prefix_ext = prefix
+            prefix = prefix[:50]
+            suffix_ext = suffix
+            suffix = suffix[:50]
+            # template model
+            tc_plus = self.target_classifier(
+                self.pm.generate_signal(prefix, samples=self.samples),
+                self.pm.generate_signal(suffix, samples=self.samples),
+                self.pm.generate_signal(prefix_ext, samples=self.samples),
+                self.pm.generate_signal(suffix_ext, samples=self.samples),
+                flankedRepeatHMM(repeat, prefix, suffix, self.pm, self.HMM_config) )
+            # complement model
+            tc_minus = self.target_classifier(
+                self.pm.generate_signal(self.__reverse_complement__(suffix), samples=self.samples),
+                self.pm.generate_signal(self.__reverse_complement__(prefix), samples=self.samples),
+                self.pm.generate_signal(self.__reverse_complement__(suffix_ext), samples=self.samples),
+                self.pm.generate_signal(self.__reverse_complement__(prefix_ext), samples=self.samples),
+                flankedRepeatHMM(self.__reverse_complement__(repeat), self.__reverse_complement__(suffix), self.__reverse_complement__(prefix), self.pm, self.HMM_config))
+            self.targets[target_name] = (tc_plus, tc_minus)
+        else:
+            raise ValueError("[repeatCounter] Target with name " + str(target_name) + " already defined")
+            
+    def detect(self, target_name, raw_signal, strand):
+        if target_name in self.targets:
+            tc_plus, tc_minus = self.targets[target_name]
+            if strand == '+':
+                tc = tc_plus
+            elif strand == '-':
+                tc = tc_minus
             else:
-                for key, value in repeat.items():
-                    model = detection[key][0]
-                    n0, score_prefix0, score_suffix0, log_p0, ticks0, offset0 = model.detect(f5_record.raw, bed_record[3])
-                    model = detection[key][1]
-                    n1, score_prefix1, score_suffix1, log_p1, ticks1, offset1 = model.detect(f5_record.raw, bed_record[3])
-                    score0 = score_prefix0 + score_suffix0
-                    score1 = score_prefix1 + score_suffix1
-                    if score0 > score1 and ticks0 > 0:
-                        if n0 < 3:
-                            continue
-                        output_queue.put('\t'.join([f5_record.ID, key, '+', str(n0), 
-                                         str(score_prefix0), str(score_suffix0), str(log_p0), str(ticks0), str(offset0)]))
-                    elif score1 > score0 and ticks1 > 0:
-                        if n1 < 3:
-                            continue
-                        output_queue.put('\t'.join([f5_record.ID, key, '-', str(n1), 
-                                         str(score_prefix1), str(score_suffix1), str(log_p1), str(ticks1), str(offset1)])) 
+                ValueError("[repeatCounter] Strand must be + or -")
+            flt_signal = sp.medfilt(raw_signal, kernel_size=3)
+            nrm_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
+            nrm_signal = np.clip(nrm_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
+            flt = rectangle(1, 8)
+            nrm_signal = opening(nrm_signal, flt)
+            nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
+            nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), mode='minmax')
+            flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')), mode='minmax')
+            trim_prefix = len(tc.prefix_ext) - len(tc.prefix)
+            trim_suffix = len(tc.suffix_ext) - len(tc.suffix)
+            score_prefix, prefix_begin, prefix_end = self.__detect_range__(nrm_signal, tc.prefix_ext, pre_trim=trim_prefix)
+            score_suffix, suffix_begin, suffix_end = self.__detect_range__(nrm_signal, tc.suffix_ext, post_trim=trim_suffix)
+            n = 0; p = 0; path = np.array([])
+            if prefix_end < suffix_begin:
+                n, p, path = self.__detect_short__(tc.repeatHMM, flt_signal[prefix_begin:suffix_end])
+            return n, score_prefix, score_suffix, p, prefix_end, suffix_begin - prefix_end
+        else:
+            raise ValueError("[repeatCounter] Target with name " + str(target_name) + " not defined")
 
-    except KeyboardInterrupt:
-        return
 
+
+
+# multi locus repeat detection 
+class repeatDetector(object):
+    class sam_record(object):
+        def __init__(self):
+            self.QNAME = ''
+            self.FLAG = 0
+            self.RNAME = ''
+            self.POS = 0
+            self.TLEN = 0
+            self.CLIP_BEGIN = 0
+            self.CLIP_END = 0
+            
+    def __init__(self, repeat_config, model_file, fast5_dir, align_config=None, HMM_config=None):
+        self.repeatCounter = repeatCounter(model_file, align_config, HMM_config)
+        self.repeatLoci = defaultdict(lambda : [])
+        self.repeat_config = repeat_config
+        self.is_init = False
+        self.f5 = fast5Index.fast5Index()
+        self.f5.load(fast5_dir)
         
-
+    def __init_hmm__(self):
+        for target_name, (chr, begin, end, repeat, prefix, suffix) in self.repeat_config.items():
+            self.repeatCounter.add_target(target_name, repeat, prefix, suffix)
+            self.repeatLoci[chr].append((target_name, begin, end))
+        self.is_init = True
         
-# parse config.json            
-def parse_config(f5_dir, model_file, repeat_config_file, bed_file, config_file=None):
-    with open(repeat_config_file) as fp:
-        ld_conf = json.load(fp)
+    def __decode_cigar__(self, cigar):
+        ops = [(int(op[:-1]), op[-1]) for op in re.findall('(\d*\D)',cigar)]
+        return ops
+
+    def __ops_length__(self, ops, recOps='MIS=X'):
+        n = [op[0] for op in ops if op[1] in recOps]
+        return sum(n)
+        
+    def __decode_sam__(self, sam_line):
+        cols = sam_line.rstrip().split('\t')
+        sr = self.sam_record()
+        if len(cols) >= 11:
+            try:
+                sr.QNAME = cols[0]
+                sr.FLAG = int(cols[1])
+                sr.RNAME = cols[2]
+                sr.POS = int(cols[3])
+                cigar_ops = self.__decode_cigar__(cols[5])
+                sr.TLEN = self.__ops_length__(cigar_ops, recOps='MDN=X')
+                sr.CLIP_BEGIN = sum([op[0] for op in cigar_ops[:2] if op[1] in 'SH'])
+                sr.CLIP_END = sum([op[0] for op in cigar_ops[-2:] if op[1] in 'SH'])
+            except:
+                return self.sam_record()
+        return sr
+        
+    def __intersect_target__(self, sam_record):
+        target_names = []
+        if sam_record.RNAME in self.repeatLoci.keys():
+            for target_name, begin, end in self.repeatLoci[sam_record.RNAME]:
+                if begin > sam_record.POS - sam_record.CLIP_BEGIN and end < sam_record.POS + sam_record.TLEN + sam_record.CLIP_END:
+                    target_names.append(target_name)
+        return target_names
+
+    def detect(self, sam_line=''):
+        if not self.is_init:
+            self.__init_hmm__()
+        sam_record = self.__decode_sam__(sam_line)
+        f5_record = self.f5.getRecord(sam_record.QNAME)
+        target_counts = []
+        if sam_record and f5_record:
+            if sam_record.FLAG & 0x10 == 0:
+                strand = '+'
+            else:
+                strand = '-'
+            target_names = self.__intersect_target__(sam_record)
+            for target_name in target_names:
+                repeat_count = self.repeatCounter.detect(target_name, f5_record.raw, strand)
+                target_counts.append((sam_record.QNAME, target_name, strand, *repeat_count))
+        return {'target_counts': target_counts}
+
+
+
+
+# writes repeat detection output to file or stdout
+class outputWriter(object):
+    def __init__(self, output_file=None):
+        self.output_file = output_file
+        if self.output_file:
+            with open(self.output_file, 'w') as fp:
+                print('\t'.join(['ID', 'target', 'strand', 'count', 'score_prefix', 'score_suffix', 'log_p', 'offset', 'ticks']), file=fp)
+        else:
+            print('\t'.join(['ID', 'target', 'strand', 'count', 'score_prefix', 'score_suffix', 'log_p', 'offset', 'ticks']))
+
+    def write_line(self, target_counts=[]):
+        if self.output_file:
+            with open(self.output_file, 'a') as fp:
+                for target_count in target_counts:
+                    print('\t'.join([str(x) for x in target_count]), file=fp)
+        else:
+            for target_count in target_counts:
+                print('\t'.join([str(x) for x in target_count]))
+
+
+
+
+# multiprocess dispatcher
+class mt_dispatcher():
+    def __init__(self, input_queue, threads=1, worker_callables=[], collector_callables=[]):
+        self.worker_callables = worker_callables
+        self.collector_callables = collector_callables
+        self.n_processed = 0
+        self.n_worker = threads
+        self.input_queue = input_queue
+        self.output_queue = Queue()
+        self.collector_queue = Queue(threads * 10)
+        self.worker = []
+        for i in range(threads):
+            self.worker.append(Process(target=self.__worker__, ))
+            self.worker[-1].start()
+        self.collector = Process(target=self.__collector__, )
+        self.collector.start()
+        
+    def __worker__(self):
+        try:
+            while True:
+                input = self.input_queue.get()
+                if not input:
+                    break
+                try:
+                    for worker_callable in self.worker_callables:
+                        input = worker_callable(**input)
+                    self.collector_queue.put(input)
+                    self.collector_queue.put('done')
+                except KeyboardInterrupt:
+                    break
+                # except:
+                    # continue
+        except KeyboardInterrupt:
+            self.collector_queue.put(None)
+            return
+        self.collector_queue.put(None)
+        self.collector_queue.close()
+        
+    def __collector__(self):
+        poison_count = self.n_worker
+        try:
+            while True:
+                input = self.collector_queue.get()
+                if input is None:
+                    poison_count -= 1
+                    if poison_count <= 0:
+                        break
+                    continue
+                elif input == 'done':
+                    self.n_processed += 1
+                    continue
+                for collector_callable in self.collector_callables:
+                    input = collector_callable(**input)
+                self.output_queue.put(input)
+        except KeyboardInterrupt:
+            pass
+        # except:
+            # pass
+        self.output_queue.put(None)
+        self.output_queue.close()
+            
+    def __stop__(self):
+        for w in self.worker:
+            self.input_queue.put(None)
+        self.input_queue.close()
+        for w in self.worker:
+            w.join()
+        self.collector_queue.close()
+        self.collector.join()
+        
+    def __iter__(self):
+        return self
+        
+    def __next__(self):
+        while True:
+            result = self.output_queue.get()
+            if result is None:
+                self.output_queue.close()
+                raise StopIteration()
+            else:
+                return result
+                
+    def close(self):
+        self.__stop__()
+    
+    def n_processed(self):
+        return self.n_processed
+
+
+
+
+ # parse config.json            
+def parse_config(repeat_config_file, param_config_file=None):
     config = {}
     # parse repeat config
-    try:
-        config['model_file'] = model_file
-        config['fast5_dir'] = f5_dir
-        if bed_file and os.path.isfile(bed_file):
-            config['bed_file'] = bed_file
-        else:
-            config['bed_file'] = None
-        config['repeat'] = ld_conf['repeat']
-        config['prefix'] = ld_conf['prefix']
-        config['suffix'] = ld_conf['suffix']
-        if 'prefix2' in ld_conf:
-            config['prefix2'] = ld_conf['prefix2']
-        else:
-            config['prefix2'] = ld_conf['prefix']
-        if 'suffix2' in ld_conf:
-            config['suffix2'] = ld_conf['suffix2']
-        else:
-            config['suffix2'] = ld_conf['suffix']
-    except KeyError as e:
-        print('Error loading repeat config file, missing', e.args[0])
-        exit(1)
+    repeats = {}
+    with open(repeat_config_file, 'r') as fp:
+        header = next(fp)
+        for line in fp:
+            cols = line.rstrip().split('\t')
+            if len(cols) == 7:
+                repeats[cols[3]] = (cols[0], int(cols[1]), int(cols[2]), cols[4], cols[5], cols[6])
+            else:
+                print("[Config] Repeat config column mismatch while parsing", file=sys.stderr)
+                print("[Config] " + line, file=sys.stderr)
+    config['repeat'] = repeats
+    config['align'] = None
+    config['HMM'] = None
     # parse HMM and alignment config
-    if config_file:
-        with open(config_file) as fp:
+    if param_config_file:
+        with open(param_config_file) as fp:
             ld_conf = json.load(fp)
         try:
             assert(isinstance(ld_conf, dict))
@@ -618,98 +696,59 @@ def parse_config(f5_dir, model_file, repeat_config_file, bed_file, config_file=N
             config['align'] = ld_conf['align']
             config['HMM'] = ld_conf['HMM']
         except KeyError as e:
-            print('Error loading HMM config file, missing', e.args[0])
+            print('[Config] Error loading HMM config file, missing', e.args[0], file=sys.stderr)
             exit(1)
         except AssertionError as e:
-            print('Config file format broken', b)
+            print('[Config] Config file format broken', file=sys.stderr)
             exit(1)
     return config
-        
- 
- 
- 
-# print progess on command line
-def process_output(counter, return_values, output_file, max_count, stop_event):
-    import time
-    # write header line
-    with open(output_file, 'w') as fp:
-        print('\t'.join(['ID', 'ref', 'flag', 'count', 'score_prefix', 'score_suffix', 'log_p', 'ticks', 'offset']), file=fp)
-        # read result queue until stop event is set
-        try:
-            while not stop_event.is_set():
-                try:
-                    record = return_values.get(True, 1)
-                    print(record, file=fp)
-                except queue.Empty:
-                    pass
-                print("\rProcessed ", counter.value, 'of ', (max_count), end=" ")
-        except KeyboardInterrupt:
-            return
-        except Exception as e:
-            print('Exception in I/O Process: ', e)
-        
- 
 
- 
+
+
+
+# main
 if __name__ == '__main__':
+    signal(SIGPIPE,SIG_DFL)
     # command line
     parser = argparse.ArgumentParser(description="STR Detection in raw nanopore data")
-    parser.add_argument("f5", help="fast5 file directory") 
+    parser.add_argument("f5", help="fast5 file directory")
     parser.add_argument("model", help="pore model")
-    parser.add_argument("config", help="job config file")
-    parser.add_argument("out", help="output file name")
-    parser.add_argument("--bed", help="alignment information in BED-6 format")
+    parser.add_argument("repeat", help="repeat region config file")
+    parser.add_argument("--out", default=None, help="output file name, if not given print to stdout")
+    parser.add_argument("--algn", default=None, help="alignment in sam format, if not given read from stdin")
+    parser.add_argument("--config", help="Config file with HMM transition probabilities")
     parser.add_argument("--t", type=int, default=1, help="Number of processes to use in parallel")
-    parser.add_argument("--hmm", help="Config file for HMM transition probabilities")
     args = parser.parse_args()
-    # validate input arguments
-    if not os.path.isdir(args.f5):
-        print("Fast5 file path is not a directory.")
-        exit(1)
-    if not os.path.isfile(args.model):
-        print("Model file not found.")
-        exit(1)
-    if not os.path.isfile(args.config):
-        print("Repeat config file " + str(args.config) + " not found.")
-        exit(1)
-    if args.bed and not os.path.isfile(args.bed):
-        print("Bed file specified but not found.")
-        exit(1)
-    if args.hmm and not os.path.isfile(args.hmm):
-        print("HMM config file specified but not found.")
-        exit(1)
     # load config
-    config = parse_config(args.f5, args.model, args.config, args.bed, args.hmm)
+    config = parse_config(args.repeat, args.config)
     # index/load reads
     f5 = fast5Index.fast5Index()
-    f5.loadOrAnalyze(config['fast5_dir'], recursive=True)
-    records = np.array(f5.getRecordNames())
-    # split in chunks for multi-processing
-    record_chunks = np.array_split(records, args.t)
-    counter = Value('i', 0)
-    return_values = Queue()
-    stop_event = Event()
-    monitor = Process(target=process_output, args=(counter, return_values, args.out, len(records), stop_event))
-    monitor.start()
-    worker = []
-    # fork into multiple worker processes
-    try:
-        if len(record_chunks) > 1:
-            for i, chunk in enumerate(record_chunks[1:]):
-                worker.append(Process(target=process_detection, args=(config, chunk, return_values, counter)))
-            for w in worker:
-               w.start()
-        process_detection(config, record_chunks[0], return_values, counter)
-        for w in worker:
-           w.join()
-    except KeyboardInterrupt:
-        pass
-    stop_event.set()
-    try:
-        monitor.join()
-    except RuntimeError:
-        print('Could not join monitor thread')
-    
-    print("")
+    f5.loadOrAnalyze(args.f5, recursive=True)
+    # repeat detector
+    rd = repeatDetector(config['repeat'], args.model, args.f5, align_config=config['align'], HMM_config=config['HMM'])
+    ow = outputWriter(args.out)
+    # run repeat detection
+    if args.t > 1:
+        sam_queue = Queue(100)
+        mt = mt_dispatcher(sam_queue, threads=args.t, worker_callables=[rd.detect], collector_callables=[ow.write_line])
+        if args.algn:
+            with open(args.algn, 'r') as fp:
+                for line in fp:
+                    sam_queue.put({'sam_line': line})
+        else:
+            for line in sys.stdin:
+                sam_queue.put({'sam_line': line})
+        mt.close()
+    else:
+        if args.algn:
+            with open(args.algn, 'r') as fp:
+                for line in fp:
+                    counts = rd.detect({'sam_line': line})
+                    ow.write_line(**counts)
+        else:
+            for line in sys.stdin:
+                counts = rd.detect({'sam_line': line})
+                ow.write_line(**counts)                
+        
     
     
