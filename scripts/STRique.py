@@ -57,7 +57,7 @@ class pore_model():
         self.model_max = max_state[0] + 6 * max_state[1]
         self.model_dict = model_dict
         
-    def __sliding_window__(a, n=3, mode='same'):
+    def __sliding_window__(self, a, n=3, mode='same'):
         if mode == 'mean':
             a = np.append(a, (n-1) * [np.mean(a)])
         elif mode == 'median':
@@ -73,7 +73,7 @@ class pore_model():
     def MAD(self, signal):
         return np.mean(np.absolute(np.subtract(signal, np.median(signal))))
 
-    def normalize2model(self, signal, clip=True, mode='median', plot=False):
+    def normalize2model(self, signal, clip=True, mode='median'):
         if mode == 'minmax':
             model_values = np.array([x[0] for x in self.model_dict.values()])
             q5_sig, q95_sig = np.percentile(signal, [1, 99])
@@ -85,13 +85,10 @@ class pore_model():
             nrm_signal = (signal - (m5_sig + (m95_sig - m5_sig) / 2)) / ((m95_sig - m5_sig) / 2)
             nrm_signal = nrm_signal * ((m95_mod - m5_mod) / 2) + (m5_mod + (m95_mod - m5_mod) / 2)
         elif mode == 'entropy':
-            #sliding_std = [np.std(x) for x in self.__sliding_window__(signal, n=1000, mode='mirror')]
             sliding_std = [self.MAD(x) for x in self.__sliding_window__(signal, n=500, mode='mirror')]
             sliding_std += [sliding_std[-1]]
             diff_signal = np.abs(np.diff(sliding_std))
             ind = np.argpartition(diff_signal, -50)[-50:]
-            # q = np.percentile(diff_signal, 97)  # 99.5
-            # diff_mask = np.array([0 if x < q else 1 for x in diff_signal], dtype=np.dtype('uint8'))
             diff_mask = np.zeros(len(diff_signal), dtype=np.dtype('uint8'))
             diff_mask[ind] = 1
             diff_mask = dilation(diff_mask.reshape((1, len(diff_mask))), rectangle(1, 750))[0].astype(np.bool)
@@ -106,28 +103,16 @@ class pore_model():
             nrm_signal = np.add(np.multiply(nrm_signal, self.model_MAD), self.model_median)
         if clip == True:
             np.clip(nrm_signal, self.model_min + .5, self.model_max - .5, out=nrm_signal)
-        #if mask and plot:
-            # f, ax = plt.subplots(3, sharex=True)
-            # ax[0].plot(nrm_signal, 'k-')
-            # ax[0].axhline(rawMedian, color='r')
-            # ax[0].axhline(np.median(signal), color='g')
-            # ax[1].plot(diff_mask, 'k-')
-            # ax[2].plot(diff_signal, 'k-')
-            # plt.show()
-            # f, ax = plt.subplots(3, sharex=False)
-            # bins = np.linspace(self.model_min, self.model_max, 75)
-            # ax[0].plot(nrm_signal, 'b-')
-            # ax[1].hist(nrm_signal, bins=bins)
-            # ax[1].hold(False)
-            # ax[2].hist([x[0] for x in self.model_dict.values()], bins=bins)
-            # ax[0].callbacks.connect('xlim_changed', lambda axes, ax1=ax[1], nrm_signal=nrm_signal, bins=bins: ax1.hist(nrm_signal[max([int(axes.get_xlim()[0]), 0]) : int(axes.get_xlim()[1])], bins=bins))
-            # plt.show()
         return nrm_signal
 
     def generate_signal(self, sequence, samples=10):
         signal = []
         level_means = np.array([self.__model[kmer][0] for kmer in [sequence[i:i+self.kmer] for i in range(len(sequence)-self.kmer + 1)]])
-        return np.repeat(level_means, samples)
+        if samples:
+            sig = np.repeat(level_means, samples)
+        else:
+            sig = np.repeat(level_means, np.random.uniform(6, 10, len(level_means)).astype(int))
+        return sig
 
 
 
@@ -146,19 +131,19 @@ class profileHMM(pg.HiddenMarkovModel):
         self.no_silent = no_silent
         self.std_scale = std_scale
         self.std_offset = std_offset
-        self.transition_probs = {'match_loop': .75,     #
-                                 'match_match': .15,    # sum to 1
-                                 'match_insert': .09,   #
-                                 'match_delete': .01,   #
+        self.transition_probs = {'match_loop': .75,     # .75
+                                 'match_match': .15,    # .15          sum to 1
+                                 'match_insert': .09,   # .09
+                                 'match_delete': .01,   # .01
 
-                                 'insert_loop' : .15,   #
-                                 'insert_match_0': .40, # sum to 1
-                                 'insert_match_1': .40, #
-                                 'insert_delete': .05,  #
+                                 'insert_loop' : .15,   # .15
+                                 'insert_match_0': .40, # .40          sum to 1
+                                 'insert_match_1': .40, # .40
+                                 'insert_delete': .05,  # .05
 
-                                 'delete_delete': .005, #
-                                 'delete_insert': .05,  # sum to 1
-                                 'delete_match': .945   #
+                                 'delete_delete': .005, # .005
+                                 'delete_insert': .05,  # .05          sum to 1
+                                 'delete_match': .945   # .945
                                  }
         for key, value in transition_probs.items():
             self.transition_probs[key] = value
@@ -423,7 +408,7 @@ class repeatCounter(object):
     def add_target(self, target_name, repeat, prefix, suffix):
         if not target_name in self.targets:
             prefix_ext = prefix
-            prefix = prefix[:50]
+            prefix = prefix[-50:]
             suffix_ext = suffix
             suffix = suffix[:50]
             # template model
@@ -466,8 +451,16 @@ class repeatCounter(object):
             score_prefix, prefix_begin, prefix_end = self.__detect_range__(nrm_signal, tc.prefix_ext, pre_trim=trim_prefix)
             score_suffix, suffix_begin, suffix_end = self.__detect_range__(nrm_signal, tc.suffix_ext, post_trim=trim_suffix)
             n = 0; p = 0; path = np.array([])
-            if prefix_end < suffix_begin:
+            if prefix_begin < suffix_end:
                 n, p, path = self.__detect_short__(tc.repeatHMM, flt_signal[prefix_begin:suffix_end])
+            # f, ax = plt.subplots(2, sharex=True)
+            # ax[0].plot(flt_signal, 'k-')
+            # ax[0].axvline(prefix_begin, color='red')
+            # ax[0].axvline(prefix_end, color='red')
+            # ax[0].axvline(suffix_begin, color='lime')
+            # ax[0].axvline(suffix_end, color='lime')
+            # ax[1].plot(np.arange(prefix_begin, suffix_end), path, 'b-')
+            # plt.show()
             return n, score_prefix, score_suffix, p, prefix_end, suffix_begin - prefix_end
         else:
             raise ValueError("[repeatCounter] Target with name " + str(target_name) + " not defined")
@@ -743,12 +736,12 @@ if __name__ == '__main__':
         if args.algn:
             with open(args.algn, 'r') as fp:
                 for line in fp:
-                    counts = rd.detect({'sam_line': line})
+                    counts = rd.detect(line)
                     ow.write_line(**counts)
         else:
             for line in sys.stdin:
-                counts = rd.detect({'sam_line': line})
+                counts = rd.detect(line)
                 ow.write_line(**counts)                
         
     
-    
+    exit(0)

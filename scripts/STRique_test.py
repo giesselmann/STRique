@@ -32,13 +32,14 @@ class DetectionTest(unittest.TestCase):
         prefix = 'CGGCAGCCGAACCCCAAACAGCCACCCGCCAGGATGCCGCCTCCTCACTCACCCACTCGCCACCGCCTGCGCCTCCGCCGCCGCGGGCGCAGGCACCGCAACCGCAGCCCCGCCCCGGGCCCGCCCCCGGGCCCGCCCCGACCACGCCCC'
         suffix = 'TAGCGCGCGACTCCTGAGTTCCAGAGCTTGCTACAGGCTGCGGTTGTTTCCCTCCTTGTTTTCTTCTGGTTAATCTTTATCAGGTCTTTTCTTGTTCACCCTCAGCGAGTACTGTGAGAGCAAGTAGTGGGGAGAGAGGGTGGGAAAAAC'
         repeat = 'GGCCCC'
-        dt = STRique.repeatDetection(model_file, repeat, prefix[-50:], suffix[:50], prefix, suffix)
+        dt = STRique.repeatCounter(model_file)
+        dt.add_target('c9orf72', repeat, prefix, suffix)
         print('Test GGCCCC repeat')
         for i in range(100, 301, 100):
             print('Test repeat length:', i)
             seq = backbone[:1000] + prefix + repeat * i + suffix + backbone[-1000:]
             sig = pm.generate_signal(seq, samples=8)
-            n, score_prefix, score_suffix, p, ticks, prefix_end = dt.detect(sig)
+            n, score_prefix, score_suffix, p, offset, ticks = dt.detect('c9orf72', sig, '+')
             self.assertEqual(n, i)
             #print('Expected: ', i, ' detected: ', n)
          
@@ -51,13 +52,14 @@ class DetectionTest(unittest.TestCase):
         prefix = 'AGCGGGCCGGGGGTTCGGCCTCAGTCAGGCGCTCAGCTCCGTTTCGGTTTCACTTCCGGTGGAGGGCCGCCTCTGAGCGGGCGGCGGGCCGACGGCGAGCGCGGGCGGCGGCGGTGACGGAGGCGCCGCTGCCAGGGGGCGTGCGGCAGC'
         suffix = 'GAGGCGGCGGCGGCGGCGGCGGCGGCGGCGGCTGGGCCTCGAGCGCCCGCAGCCCACCTCTCGGGGGCGGGCTCCCGGCGCTAGCAGGGCTGAAGAGAAGATGGAGGAGCTGGTGGTGGAAGTGCGGGGCTCCAATGGCGCTTTCTACAA'
         repeat = 'GCG'
-        dt = STRique.repeatDetection(model_file, repeat, prefix[-50:], suffix[:50], prefix, suffix)
+        dt = STRique.repeatCounter(model_file)
+        dt.add_target('fmr1', repeat, prefix, suffix)
         print('Test GCG repeat')
         for i in range(100, 301, 100):
             print('Test repeat length:', i)
             seq = backbone[:1000] + prefix + repeat * i + suffix + backbone[-1000:]
             sig = pm.generate_signal(seq, samples=8)
-            n, score_prefix, score_suffix, p, ticks, prefix_end = dt.detect(sig)
+            n, score_prefix, score_suffix, p, offset, ticks = dt.detect('fmr1', sig, '+')
             self.assertEqual(n, i)
             #print('Expected: ', i, ' detected: ', n)
 
@@ -67,13 +69,14 @@ class DetectionTest(unittest.TestCase):
         prefix = 'CGGCAGCCGAACCCCAAACAGCCACCCGCCAGGATGCCGCCTCCTCACTCACCCACTCGCCACCGCCTGCGCCTCCGCCGCCGCGGGCGCAGGCACCGCAACCGCAGCCCCGCCCCGGGCCCGCCCCCGGGCCCGCCCCGACCACGCCCC'
         suffix = 'TAGCGCGCGACTCCTGAGTTCCAGAGCTTGCTACAGGCTGCGGTTGTTTCCCTCCTTGTTTTCTTCTGGTTAATCTTTATCAGGTCTTTTCTTGTTCACCCTCAGCGAGTACTGTGAGAGCAAGTAGTGGGGAGAGAGGGTGGGAAAAAC'
         repeat = 'GGCCCC'
-        dt = STRique.repeatDetection(model_file, repeat, prefix[-50:], suffix[:50], prefix, suffix)
+        dt = STRique.repeatCounter(model_file)
+        dt.add_target('c9orf72', repeat, prefix, suffix)
         print('Test normalization on short prefix/suffix sequences')
         for i in range(10, 100, 10):
             print('Test repeat length:', i)
             seq = prefix + repeat * i + suffix
             sig = pm.generate_signal(seq, samples=8)
-            n, score_prefix, score_suffix, p, ticks, prefix_end = dt.detect(sig)
+            n, score_prefix, score_suffix, p, offset, ticks = dt.detect('c9orf72', sig, '+')
             self.assertEqual(n, i)
             #print('Expected: ', i, ' detected: ', n)
             
