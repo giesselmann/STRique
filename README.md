@@ -5,7 +5,6 @@ STRique is a nanopore raw signal repeat detection pipeline
 
 	Python 3.5 or higher
 	pomegranate
-	biopython
 	numpy, scipy
 	h5py
 		
@@ -20,28 +19,32 @@ In order to download, build and install STRique , execute the following commands
 
     git clone --recursive https://github.com/giesselmann/STRique
     cd STRique
-	pip install .
+	python3 setup.py install
 
-## Usage
-	python scripts/STRique.py [-h] [--bed BED] [--t T] f5 model config out
+## Usage	  
+	usage: python3 STRique.py [-h] [--out OUT] [--algn ALGN] [--config CONFIG] [--t T] f5 model repeat
+
+	STR Detection in raw nanopore data
 
 	positional arguments:
-	  f5          fast5 file directory
-	  model       pore model
-	  config      repeat config file
-	  out         output directory
+	  f5               fast5 file directory
+	  model            pore model
+	  repeat           repeat region config file
 
 	optional arguments:
-	  --bed BED   alignment file in bed format
-	  --t T       Number of processes to use in parallel
-	  
+	  -h, --help       show this help message and exit
+	  --out OUT        output file name, if not given print to stdout
+	  --algn ALGN      alignment in sam format, if not given read from stdin
+	  --config CONFIG  Config file with HMM transition probabilities
+	  --t T            Number of processes to use in parallel
+
 ## Test
 Test the pipeline with the following commands in the cloned repository:
 
-	python scripts/STRique_test.py
-	python scripts/STRique.py data models/template_median68pA6mer.model configs/c9orf72.json ./c9orf72.tsv
+	python scripts/STRique_test.py	
+	cat data/c9orf72.sam | python3 scripts/STRique.py ./data ./models/template_median68pA6mer.model ./configs/repeat_config.tsv --config ./configs/STRique.json
 
-A File *c9orf72.tsv* with similar content should have been created:
+You should see output similar to 
 
-	ID	ref	flag	count	score_prefix	score_suffix	log_p	ticks	offset
-	ce47b364-ed6e-4409-808a-1041c0b5aac2	chr9	-	148	4690.2021484375	4738.76953125	-26745.348046750227	40978	1635
+	ID      target strand count score_prefix score_suffix log_p offset ticks
+	ce47b364-ed6e-4409-808a-1041c0b5aac2 c9orf72 - 735 6.3155927807600545 6.031860427335506 -119860.52066647023 1633 40758
