@@ -397,7 +397,10 @@ class repeatCounter(object):
         score, idx_signal, idx_segment = self.algn.align_overlap(signal, segment)
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1]).argmin()
-        score = score / (segment_end - segment_begin)
+        if segment_end > segment_begin:
+            score = score / (segment_end - segment_begin)
+        else:
+            score = 0.0
         segment_begin = np.abs(np.array(idx_signal) - idx_segment[0 + pre_trim]).argmin()
         segment_end = np.abs(np.array(idx_signal) - idx_segment[-1 - post_trim]).argmin()
         return score, segment_begin, segment_end
@@ -451,7 +454,7 @@ class repeatCounter(object):
             score_prefix, prefix_begin, prefix_end = self.__detect_range__(nrm_signal, tc.prefix_ext, pre_trim=trim_prefix)
             score_suffix, suffix_begin, suffix_end = self.__detect_range__(nrm_signal, tc.suffix_ext, post_trim=trim_suffix)
             n = 0; p = 0; path = np.array([])
-            if prefix_begin < suffix_end:
+            if prefix_begin < suffix_end and score_prefix > 0.0 and score_suffix > 0.0:
                 n, p, path = self.__detect_short__(tc.repeatHMM, flt_signal[prefix_begin:suffix_end])
             # f, ax = plt.subplots(2, sharex=True)
             # ax[0].plot(flt_signal, 'k-')
@@ -542,7 +545,7 @@ class repeatDetector(object):
             for target_name in target_names:
                 repeat_count = self.repeatCounter.detect(target_name, f5_record.raw, strand)
                 target_counts.append((sam_record.QNAME, target_name, strand, *repeat_count))
-        return {'target_counts': target_counts}
+            return {'target_counts': target_counts}
 
 
 
@@ -595,12 +598,13 @@ class mt_dispatcher():
                 try:
                     for worker_callable in self.worker_callables:
                         input = worker_callable(**input)
-                    self.collector_queue.put(input)
-                    self.collector_queue.put('done')
+                    if input:
+                        self.collector_queue.put(input)
+                        self.collector_queue.put('done')
                 except KeyboardInterrupt:
                     break
-                # except:
-                    # continue
+                except:
+                    continue
         except KeyboardInterrupt:
             self.collector_queue.put(None)
             return
@@ -625,8 +629,9 @@ class mt_dispatcher():
                 self.output_queue.put(input)
         except KeyboardInterrupt:
             pass
-        # except:
-            # pass
+        except:
+            print("Error in collector", file=sys.stderr)
+            pass
         self.output_queue.put(None)
         self.output_queue.close()
             
