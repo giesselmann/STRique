@@ -38,6 +38,16 @@ In order to download, build and install STRique , execute the following commands
 	  --config CONFIG  Config file with HMM transition probabilities
 	  --t T            Number of processes to use in parallel
 
+## Configuration
+	targeted repeats are configured in a tsv file with columns
+	
+	chr	begin	end	name	repeat	prefix	suffix
+	
+	e.g. c9orf72
+	chr9	27573527	27573544	c9orf72	GGCCCC	...GCCCCGACCACGCCCC	TAGCGCGCGACTCCTG...
+	the longer the prefix/ suffix sequences, the more reliable the signal alignment. 
+	Repeat, prefix and suffix sequence are always on template strand
+	
 ## Test
 Test the pipeline with the following commands in the cloned repository:
 
