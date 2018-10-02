@@ -1,4 +1,5 @@
 # STRique
+[![Build Status](https://travis-ci.org/giesselmann/STRique.svg?branch=master)](https://travis-ci.org/giesselmann/STRique)
 STRique is a nanopore raw signal repeat detection pipeline
 ## Dependencies
 **Python 3.5 or higher**
