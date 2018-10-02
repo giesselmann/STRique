@@ -1,18 +1,19 @@
 # STRique
 STRique is a nanopore raw signal repeat detection pipeline
 ## Dependencies
-**Python**
+**Python 3.5 or higher**
 
-	Python 3.5 or higher
 	pomegranate
-	numpy, scipy
+	numpy, scipy, scikit-image
 	h5py
 		
 **C++**
 	
 	g++ > 5 (C++14 support)
-	SeqAn2 (downloaded by install script)
-	Pybind11 (downloaded by install script)
+	SeqAn2
+	Pybind11
+	
+Dependencies get downloaded and build by the setup script.
 
 ## Installation
 In order to download, build and install STRique , execute the following commands:
@@ -45,6 +46,7 @@ In order to download, build and install STRique , execute the following commands
 	
 	e.g. c9orf72
 	chr9	27573527	27573544	c9orf72	GGCCCC	...GCCCCGACCACGCCCC	TAGCGCGCGACTCCTG...
+	
 	the longer the prefix/ suffix sequences, the more reliable the signal alignment. 
 	Repeat, prefix and suffix sequence are always on template strand
 	

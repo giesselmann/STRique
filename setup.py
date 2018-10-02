@@ -81,6 +81,6 @@ setup(
     ext_modules=[CMakeExtension('pyseqan')],    
     cmdclass=dict(build_ext=CMakeBuild),
     python_requires='>3',
-    install_requires=['NumPy', 'SciPy', 'pomegranate', 'biopython', 'h5py', 'scikit-image'],
+    install_requires=['NumPy', 'SciPy', 'pomegranate', 'h5py', 'scikit-image'],
     zip_safe=False,
 )
