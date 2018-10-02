@@ -1,4 +1,4 @@
-# \MODULE\---------------------------------------------------------------
+# \MODULE\-------------------------------------------------------------------------
 #
 #  CONTENTS      : Fast5 directory index
 #
@@ -8,11 +8,29 @@
 #
 #  REQUIRES      : none
 #
-# -----------------------------------------------------------------------
-#  All rights reserved to Max Planck Institute for Molecular Genetics
-#  Berlin, Germany
-#  Written by Pay Giesselmann
-# -----------------------------------------------------------------------
+# ---------------------------------------------------------------------------------
+# Copyright (c) 2018,  Pay Giesselmann, Max Planck Institute for Molecular Genetics
+# 
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+# 
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+# 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+# Written by Pay Giesselmann
+# ---------------------------------------------------------------------------------
 # public imports
 import os, sys, glob
 import re
@@ -21,6 +39,8 @@ import json
 import tarfile
 # private imports
 import fast5Reader
+
+
 
 
 class fast5Index(object):
@@ -119,10 +139,3 @@ class fast5Index(object):
                 record = self.__f5Reader.getRecord(os.path.join(self.__path2fast5, member.name))
                 os.remove(os.path.join(self.__path2fast5, member.name))
                 return record
-
-
-if __name__ == '__main__':
-    f5Path = "D:/data/runs/20170626_plasmid_c9orf72_RAD002/reads"
-    f5Index = fast5Index()
-    f5Index.loadOrAnalyze(f5Path, recursive=True)
-    pass
