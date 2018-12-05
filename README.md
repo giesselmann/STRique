@@ -20,7 +20,9 @@ In order to download, build and install STRique , execute the following commands
 
     git clone --recursive https://github.com/giesselmann/STRique
     cd STRique
-	python3 setup.py install
+    python3 setup.py install
+    
+Installation time < 5min
 
 ## Usage	  
 	usage: python3 STRique.py [-h] [--out OUT] [--algn ALGN] [--config CONFIG] [--t T] f5 model repeat
@@ -60,3 +62,5 @@ You should see output similar to
 
 	ID      target strand count score_prefix score_suffix log_p offset ticks
 	ce47b364-ed6e-4409-808a-1041c0b5aac2 c9orf72 - 735 6.3155927807600545 6.031860427335506 -119860.52066647023 1633 40758
+
+Run time <1 min on a typical desktop computer, multiprocessing supported
