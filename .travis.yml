@@ -1,7 +1,6 @@
 # travis.yml for https://github.com/giesselmann/STRique
 
 dist: xenial
-sudo: true
 language: python
 
 matrix:
