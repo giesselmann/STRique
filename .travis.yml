@@ -6,6 +6,7 @@ matrix:
   include:
   # OSX builds
   - os: osx
+    language: generic
     compiler: gcc
     env:
       - CXX_COMPILER='g++'
@@ -13,8 +14,8 @@ matrix:
       - Fortran_COMPILER='gfortran'
       - BUILD_TYPE='Release'
       - PYTHON=3.5.1
-    python: "3.5"
   - os: osx
+    language: generic
     compiler: gcc
     env:
       - CXX_COMPILER='g++'
@@ -22,8 +23,8 @@ matrix:
       - Fortran_COMPILER='gfortran'
       - BUILD_TYPE='Release'
       - PYTHON=3.6.0
-    python: "3.6"
   - os: osx
+    language: generic
     compiler: gcc
     env:
       - CXX_COMPILER='g++'
@@ -31,9 +32,9 @@ matrix:
       - Fortran_COMPILER='gfortran'
       - BUILD_TYPE='Release'
       - PYTHON=3.7.0
-    python: "3.7"
   # Linux builds
   - os: linux
+    language: python
     python: "3.5"
     compiler: gcc
     addons: &gcc6
@@ -52,6 +53,7 @@ matrix:
       - COVERAGE=OFF
       - PYTHON=3.5
   - os: linux
+    language: python
     python: "3.6"
     compiler: gcc
     addons: &gcc6
@@ -70,6 +72,7 @@ matrix:
       - COVERAGE=OFF
       - PYTHON=3.6
   - os: linux
+    language: python
     dist: xenial
     python: "3.7"
     compiler: gcc
