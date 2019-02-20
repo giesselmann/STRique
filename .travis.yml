@@ -37,6 +37,8 @@ matrix:
     compiler: gcc
     addons: &gcc6
       apt:
+        sources:
+          - ubuntu-toolchain-r-test
         packages:
           - cmake3
           - g++-6
@@ -55,6 +57,8 @@ matrix:
     compiler: gcc
     addons: &gcc6
       apt:
+        sources:
+          - ubuntu-toolchain-r-test
         packages:
           - cmake3
           - g++-6
@@ -75,6 +79,8 @@ matrix:
     compiler: gcc
     addons: &gcc6
       apt:
+        sources:
+          - ubuntu-toolchain-r-test
         packages:
           - cmake3
           - g++-6
