@@ -98,9 +98,10 @@ notifications:
   email: false
 
 install:
-  - sudo rm /usr/bin/gcc && sudo rm /usr/bin/g++
-  - sudo ln -s /usr/bin/gcc-6 /usr/bin/gcc
-  - sudo ln -s /usr/bin/g++-6 /usr/bin/g++
+  - sudo ln -s /usr/bin/gcc-6 /usr/local/bin/gcc
+  - sudo ln -s /usr/bin/g++-6 /usr/local/bin/g++
+  - export CC=/usr/bin/gcc-6
+  - export CXX=/usr/bin/g++-6
   - python --version
   - pip install -r requirements.txt
   - python setup.py install
