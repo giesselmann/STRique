@@ -98,6 +98,7 @@ notifications:
   email: false
 
 install:
+  - sudo rm /usr/bin/gcc && sudo rm user/bin/g++
   - sudo ln -s /usr/bin/gcc-6 /usr/bin/gcc
   - sudo ln -s /usr/bin/g++-6 /usr/bin/g++
   - python --version
