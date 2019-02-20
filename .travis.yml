@@ -1,6 +1,4 @@
 # travis.yml for https://github.com/giesselmann/STRique
-
-dist: xenial
 language: python
 
 matrix:
@@ -35,12 +33,11 @@ matrix:
     python: "3.7"
   # Linux builds
   - os: linux
+    dist: xenial
     python: "3.5"
     compiler: gcc
     addons: &gcc6
       apt:
-        sources:
-          - ubuntu-toolchain-r-test
         packages:
           - cmake3
           - g++-6
@@ -55,12 +52,11 @@ matrix:
       - COVERAGE=OFF
       - PYTHON=3.5
   - os: linux
+    dist: xenial
     python: "3.6"
     compiler: gcc
     addons: &gcc6
       apt:
-        sources:
-          - ubuntu-toolchain-r-test
         packages:
           - cmake3
           - g++-6
@@ -75,12 +71,11 @@ matrix:
       - COVERAGE=OFF
       - PYTHON=3.6
   - os: linux
+    dist: xenial
     python: "3.7"
     compiler: gcc
     addons: &gcc6
       apt:
-        sources:
-          - ubuntu-toolchain-r-test
         packages:
           - cmake3
           - g++-6
