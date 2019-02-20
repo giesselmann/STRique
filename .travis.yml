@@ -1,5 +1,6 @@
 # travis.yml for https://github.com/giesselmann/STRique
 language: python
+sudo: true
 
 matrix:
   include:
@@ -74,7 +75,6 @@ matrix:
       - PYTHON=3.6
   - os: linux
     dist: xenial
-    sudo: true
     python: "3.7"
     compiler: gcc
     addons: &gcc6
@@ -99,12 +99,8 @@ notifications:
   email: false
 
 install:
-  - >
-     cmake -Bbuild -H.
-     -DCMAKE_CXX_COMPILER=${CXX_COMPILER}
-     -DCMAKE_C_COMPILER=${C_COMPILER}
-     -DCMAKE_Fortran_COMPILER=${Fortran_COMPILER}
-     -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
+  - sudo ln -s /usr/bin/gcc-6 /usr/local/bin/gcc
+  - sudo ln -s /usr/bin/g++-6 /usr/local/bin/g++
   - python --version
   - pip install -r requirements.txt
   - python setup.py install
