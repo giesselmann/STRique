@@ -1,40 +1,12 @@
 # travis.yml for https://github.com/giesselmann/STRique
-
-dist: xenial
 language: python
+sudo: true
 
 matrix:
   include:
-  # OSX builds
-  - os: osx
-    compiler: gcc
-    env:
-      - CXX_COMPILER='g++'
-      - C_COMPILER='gcc'
-      - Fortran_COMPILER='gfortran'
-      - BUILD_TYPE='Release'
-      - PYTHON=3.5
-    python: "3.5"
-  - os: osx
-    compiler: gcc
-    env:
-      - CXX_COMPILER='g++'
-      - C_COMPILER='gcc'
-      - Fortran_COMPILER='gfortran'
-      - BUILD_TYPE='Release'
-      - PYTHON=3.6
-    python: "3.6"
-  - os: osx
-    compiler: gcc
-    env:
-      - CXX_COMPILER='g++'
-      - C_COMPILER='gcc'
-      - Fortran_COMPILER='gfortran'
-      - BUILD_TYPE='Release'
-      - PYTHON=3.7
-    python: "3.7"
   # Linux builds
   - os: linux
+    language: python
     python: "3.5"
     compiler: gcc
     addons: &gcc6
@@ -45,8 +17,6 @@ matrix:
           - cmake3
           - g++-6
           - gcc-6
-          - gfortran-6
-          - swig
     env:
       - CXX_COMPILER='g++-6'
       - C_COMPILER='gcc-6'
@@ -55,6 +25,7 @@ matrix:
       - COVERAGE=OFF
       - PYTHON=3.5
   - os: linux
+    language: python
     python: "3.6"
     compiler: gcc
     addons: &gcc6
@@ -65,8 +36,6 @@ matrix:
           - cmake3
           - g++-6
           - gcc-6
-          - gfortran-6
-          - swig
     env:
       - CXX_COMPILER='g++-6'
       - C_COMPILER='gcc-6'
@@ -75,6 +44,8 @@ matrix:
       - COVERAGE=OFF
       - PYTHON=3.6
   - os: linux
+    language: python
+    dist: xenial
     python: "3.7"
     compiler: gcc
     addons: &gcc6
@@ -82,11 +53,8 @@ matrix:
         sources:
           - ubuntu-toolchain-r-test
         packages:
-          - cmake3
           - g++-6
           - gcc-6
-          - gfortran-6
-          - swig
     env:
       - CXX_COMPILER='g++-6'
       - C_COMPILER='gcc-6'
@@ -99,13 +67,8 @@ notifications:
   email: false
 
 install:
-  - >
-     cmake -Bbuild -H.
-     -DCMAKE_CXX_COMPILER=${CXX_COMPILER}
-     -DCMAKE_C_COMPILER=${C_COMPILER}
-     -DCMAKE_Fortran_COMPILER=${Fortran_COMPILER}
-     -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
-  - pipenv $PYTHON install
+  - export CC=/usr/bin/gcc-6
+  - export CXX=/usr/bin/g++-6
   - python --version
   - pip install -r requirements.txt
   - python setup.py install

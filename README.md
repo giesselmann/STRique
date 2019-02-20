@@ -20,6 +20,7 @@ In order to download, build and install STRique , execute the following commands
 
     git clone --recursive https://github.com/giesselmann/STRique
     cd STRique
+	pip3 install -r requirements.txt
     python3 setup.py install
     
 Installation time < 5min
