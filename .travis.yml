@@ -12,7 +12,7 @@ matrix:
       - C_COMPILER='gcc'
       - Fortran_COMPILER='gfortran'
       - BUILD_TYPE='Release'
-      - PYTHON=3.5
+      - PYTHON=3.5.1
     python: "3.5"
   - os: osx
     compiler: gcc
@@ -21,7 +21,7 @@ matrix:
       - C_COMPILER='gcc'
       - Fortran_COMPILER='gfortran'
       - BUILD_TYPE='Release'
-      - PYTHON=3.6
+      - PYTHON=3.6.0
     python: "3.6"
   - os: osx
     compiler: gcc
@@ -30,7 +30,7 @@ matrix:
       - C_COMPILER='gcc'
       - Fortran_COMPILER='gfortran'
       - BUILD_TYPE='Release'
-      - PYTHON=3.7
+      - PYTHON=3.7.0
     python: "3.7"
   # Linux builds
   - os: linux
@@ -44,8 +44,6 @@ matrix:
           - cmake3
           - g++-6
           - gcc-6
-          - gfortran-6
-          - swig
     env:
       - CXX_COMPILER='g++-6'
       - C_COMPILER='gcc-6'
@@ -64,8 +62,6 @@ matrix:
           - cmake3
           - g++-6
           - gcc-6
-          - gfortran-6
-          - swig
     env:
       - CXX_COMPILER='g++-6'
       - C_COMPILER='gcc-6'
@@ -84,8 +80,6 @@ matrix:
         packages:
           - g++-6
           - gcc-6
-          - gfortran-6
-          - swig
     env:
       - CXX_COMPILER='g++-6'
       - C_COMPILER='gcc-6'
@@ -96,6 +90,19 @@ matrix:
 
 notifications:
   email: false
+  
+before_install:
+  - if [ "$TRAVIS_OS_NAME" == "osx" ]; then
+        brew update
+        brew install openssl readline
+        brew outdated pyenv || brew upgrade pyenv
+        brew install pyenv-virtualenv
+        pyenv install $PYTHON
+        export PYENV_VERSION=$PYTHON
+        export PATH="/Users/travis/.pyenv/shims:${PATH}"
+        pyenv-virtualenv venv
+        source venv/bin/activate
+    fi
 
 install:
   - export CC=/usr/bin/gcc-6
