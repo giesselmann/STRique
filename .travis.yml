@@ -34,7 +34,6 @@ matrix:
     python: "3.7"
   # Linux builds
   - os: linux
-    language: generic
     python: "3.5"
     compiler: gcc
     addons: &gcc6
@@ -99,8 +98,25 @@ notifications:
   email: false
 
 install:
+  - >
+     cmake -Bbuild -H.
+     -DCMAKE_CXX_COMPILER=${CXX_COMPILER}
+     -DCMAKE_C_COMPILER=${C_COMPILER}
+     -DCMAKE_Fortran_COMPILER=${Fortran_COMPILER}
+     -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
+  - |
+    if [[ "${TRAVIS_OS_NAME}" == "osx" ]]; then
+      brew update &> /dev/null
+      brew cask uninstall --force oclint
+      brew upgrade cmake python
+      brew install gcc pipenv swig
+    elif [[ "${TRAVIS_OS_NAME}" == "linux" ]]; then
+      # pip install --user pipenv --upgrade
+      # https://github.com/pypa/pipenv/issues/3224
+      pip install --user --upgrade -e git+https://github.com/pypa/pipenv.git#egg=pipenv
+    fi
+  - pipenv $PYTHON install
   - python --version
-  - python3 --version
   - pip install -r requirements.txt
   - python setup.py install
     
