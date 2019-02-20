@@ -4,34 +4,6 @@ sudo: true
 
 matrix:
   include:
-  # OSX builds
-  - os: osx
-    language: generic
-    compiler: gcc
-    env:
-      - CXX_COMPILER='g++'
-      - C_COMPILER='gcc'
-      - Fortran_COMPILER='gfortran'
-      - BUILD_TYPE='Release'
-      - PYTHON=3.5.1
-  - os: osx
-    language: generic
-    compiler: gcc
-    env:
-      - CXX_COMPILER='g++'
-      - C_COMPILER='gcc'
-      - Fortran_COMPILER='gfortran'
-      - BUILD_TYPE='Release'
-      - PYTHON=3.6.0
-  - os: osx
-    language: generic
-    compiler: gcc
-    env:
-      - CXX_COMPILER='g++'
-      - C_COMPILER='gcc'
-      - Fortran_COMPILER='gfortran'
-      - BUILD_TYPE='Release'
-      - PYTHON=3.7.0
   # Linux builds
   - os: linux
     language: python
@@ -93,19 +65,6 @@ matrix:
 
 notifications:
   email: false
-  
-before_install:
-  - if [ "$TRAVIS_OS_NAME" == "osx" ]; then
-      brew update
-      brew install openssl readline
-      brew outdated pyenv || brew upgrade pyenv
-      brew install pyenv-virtualenv
-      pyenv install $PYTHON
-      export PYENV_VERSION=$PYTHON
-      export PATH="/Users/travis/.pyenv/shims:${PATH}"
-      pyenv-virtualenv venv
-      source venv/bin/activate
-    fi
 
 install:
   - export CC=/usr/bin/gcc-6
