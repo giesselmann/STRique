@@ -105,7 +105,6 @@ install:
      -DCMAKE_C_COMPILER=${C_COMPILER}
      -DCMAKE_Fortran_COMPILER=${Fortran_COMPILER}
      -DCMAKE_BUILD_TYPE=${BUILD_TYPE}
-  - pipenv $PYTHON install
   - python --version
   - pip install -r requirements.txt
   - python setup.py install
