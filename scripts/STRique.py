@@ -748,21 +748,24 @@ if __name__ == '__main__':
         if args.algn:
             with open(args.algn, 'r') as fp:
                 for line in fp:
-                    sam_queue.put({'sam_line': line})
+                    if not line.startswith('@'):
+                        sam_queue.put({'sam_line': line})
         else:
             for line in sys.stdin:
-                sam_queue.put({'sam_line': line})
+                if not line.startswith('@'):
+                    sam_queue.put({'sam_line': line})
         mt.close()
     else:
         if args.algn:
             with open(args.algn, 'r') as fp:
                 for line in fp:
-                    counts = rd.detect(line)
-                    ow.write_line(**counts)
+                    if not line.startswith('@'):
+                        counts = rd.detect(line)
+                        ow.write_line(**counts)
         else:
             for line in sys.stdin:
-                counts = rd.detect(line)
-                ow.write_line(**counts)                
-        
+                if not line.startswith('@'):
+                    counts = rd.detect(line)
+                    ow.write_line(**counts)
     
     exit(0)
