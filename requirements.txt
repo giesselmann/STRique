@@ -7,3 +7,4 @@ pyyaml
 h5py >= 2.7.1
 scikit-image
 pomegranate == 0.10.0
+submodules/ont_fast5_api
