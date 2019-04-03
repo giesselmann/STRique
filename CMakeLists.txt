@@ -31,8 +31,8 @@ if (OPENMP_FOUND)
 endif()
              
 # set up SeqAn environment
-set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/seqan/util/cmake")
-set(SEQAN_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/seqan/include")
+set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/submodules/seqan/util/cmake")
+set(SEQAN_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/submodules/seqan/include")
 set(SEQAN_HAS_OPENMP ${OPENMP_FOUND} CACHE BOOL "SeqAn has openmp")
 set(SEQAN_ARCH_SSE4 ON CACHE BOOL "Enable SSE instructions")
 set(SEQAN_ARCH_AVX2 ON CACHE BOOL "Enable AVX instructions")
@@ -56,7 +56,7 @@ if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 endif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
 
 # add sources
-add_subdirectory("${CMAKE_SOURCE_DIR}/pybind11")
+add_subdirectory("${CMAKE_SOURCE_DIR}/submodules/pybind11")
 add_subdirectory("${CMAKE_SOURCE_DIR}/src")
 
 # config summary

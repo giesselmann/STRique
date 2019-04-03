@@ -73,14 +73,13 @@ class CMakeBuild(build_ext):
 
 setup(
     name='STRique',
-    version='0.1.0',
+    version='0.2.0',
     author='Pay Giesselmann',
     author_email='giesselmann@molgen.mpg.de',
     description='Nanopore raw signal repeat detection',
     long_description='',
-    ext_modules=[CMakeExtension('pyseqan')],    
+    ext_modules=[CMakeExtension('pyseqan')],
     cmdclass=dict(build_ext=CMakeBuild),
-    python_requires='>3',
-    install_requires=['NumPy >= 1.14.0', 'SciPy', 'networkx >= 1.8.1, < 2.0', 'pomegranate == 0.10.0', 'h5py', 'scikit-image'],
+    python_requires='>=3.5',
     zip_safe=False,
 )
