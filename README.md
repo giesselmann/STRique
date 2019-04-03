@@ -1,5 +1,6 @@
 # STRique
 [![Build Status](https://travis-ci.org/giesselmann/STRique.svg?branch=master)](https://travis-ci.org/giesselmann/STRique) [![Latest GitHub release](https://img.shields.io/github/release-pre/giesselmann/STRique.svg)](https://github.com/giesselmann/STRique/releases/latest) [![Docker Automated build](https://img.shields.io/docker/automated/giesselmann/strique.svg)](https://hub.docker.com/r/giesselmann/strique/)
+
 STRique is a nanopore raw signal repeat detection pipeline
 
 ## Dependencies
@@ -18,22 +19,22 @@ STRique is a nanopore raw signal repeat detection pipeline
 Dependencies get downloaded and build by the setup script.
 
 ## Installation
-In order to download, build and install STRique, execute the following commands:
+In order to download, build and install STRique, execute the following commands (Consider using a python virtual environment):
 
     git clone --recursive https://github.com/giesselmann/STRique
     cd STRique
 	pip3 install -r requirements.txt
     python3 setup.py install
 
-Alternatively we provided a Docker container containing the STRique pipeline:
+Alternatively we provide a Docker container containing the STRique pipeline:
 
 	docker pull giesselmann/strique
 
-Installation time < 5min, usage of a virtual environment is recommended.
+Installation time < 5min.
 
 ## Usage
 
-STRique works on raw nanopore read data in either single or bulk fast5 format. Batches of single reads in tar archives work as well. Before starting the repeat detection the raw data folder must be indexed to enable extraction of single reads. The index file contains relative paths to the individual reads and must be written into indexed directory itself.
+STRique works on raw nanopore read data in either single or bulk fast5 format. Batches of single reads in tar archives work as well. Before starting the repeat detection the raw data folder must be indexed to enable extraction of single reads. The index file contains relative paths to the reads and must be saved in the indexed directory.
 
 	python3 scripts/STRique.py index [OPTIONS] input
 
@@ -62,15 +63,15 @@ The repeat detection requires an indexed raw data archive and the alignment of t
 
 
 ## Configuration
-	targeted repeats are configured in a tsv file with columns
+
+Targeted repeats are configured in a tsv file with columns
 
 	chr	begin	end	name	repeat	prefix	suffix
 
 	e.g. c9orf72
 	chr9	27573527	27573544	c9orf72	GGCCCC	...GCCCCGACCACGCCCC	TAGCGCGCGACTCCTG...
 
-	the longer the prefix/ suffix sequences, the more reliable the signal alignment.
-	Repeat, prefix and suffix sequence are always on template strand
+The longer the prefix/ suffix sequences, the more reliable the signal alignment. Repeat, prefix and suffix sequence are always on template strand
 
 ## Test & Examples
 Test the pipeline with the following commands in the cloned repository:
