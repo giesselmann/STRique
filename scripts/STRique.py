@@ -781,6 +781,9 @@ Available commands are:
                     sam_queue.put({'sam_line': line})
         mt.close()
 
+
+
+
 # main
 if __name__ == '__main__':
     signal(SIGPIPE,SIG_DFL)
