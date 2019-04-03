@@ -9,7 +9,7 @@
 #  REQUIRES      : none
 #
 # ---------------------------------------------------------------------------------
-# Copyright (c) 2018,  Pay Giesselmann, Max Planck Institute for Molecular Genetics
+# Copyright (c) 2018-2019,  Pay Giesselmann, Max Planck Institute for Molecular Genetics
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -726,7 +726,7 @@ class main():
         description='STRique: a nanopore raw signal repeat detection pipeline',
         usage='''STRique.py <command> [<args>]
 Available commands are:
-   index        Index batch(es) of bulk-fast5 or tar archived single fast5
+   index      Index batch(es) of bulk-fast5 or tar archived single fast5
    count      Extract single reads from indexed sequencing run
 ''')
         parser.add_argument('command', help='Subcommand to run')

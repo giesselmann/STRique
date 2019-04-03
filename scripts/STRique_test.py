@@ -2,25 +2,25 @@
 #
 #  CONTENTS      : Raw nanopore signal repeat detection pipeline test
 #
-#  DESCRIPTION   : 
+#  DESCRIPTION   :
 #
 #  RESTRICTIONS  : none
 #
 #  REQUIRES      : none
 #
 # ---------------------------------------------------------------------------------
-# Copyright (c) 2018,  Pay Giesselmann, Max Planck Institute for Molecular Genetics
-# 
+# Copyright (c) 2018-2019,  Pay Giesselmann, Max Planck Institute for Molecular Genetics
+#
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
 # in the Software without restriction, including without limitation the rights
 # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 # copies of the Software, and to permit persons to whom the Software is
 # furnished to do so, subject to the following conditions:
-# 
+#
 # The above copyright notice and this permission notice shall be included in all
 # copies or substantial portions of the Software.
-# 
+#
 # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
@@ -61,9 +61,9 @@ class DetectionTest(unittest.TestCase):
             n, score_prefix, score_suffix, p, offset, ticks = dt.detect('c9orf72', sig, '+')
             self.assertEqual(n, i)
             #print('Expected: ', i, ' detected: ', n)
-         
+
     # Test special case of repeats shorter than kmer in pore model
-    # this requires interpolation and limits detection resolution          
+    # this requires interpolation and limits detection resolution
     def test_Interpolation(self):
         model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'template_median68pA6mer.model')
         pm = STRique.pore_model(model_file)
@@ -105,4 +105,3 @@ class DetectionTest(unittest.TestCase):
 # main function
 if __name__ == '__main__':
     unittest.main()
-    
