@@ -1,8 +1,8 @@
 # \TEST\-------------------------------------------------------------------------
 #
-#  CONTENTS      : Raw nanopore signal repeat detection pipeline test
+#  CONTENTS      : STRique tests
 #
-#  DESCRIPTION   :
+#  DESCRIPTION   : Raw nanopore signal repeat detection pipeline tests
 #
 #  RESTRICTIONS  : none
 #

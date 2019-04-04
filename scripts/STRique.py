@@ -1,8 +1,8 @@
 # \MODULE\-------------------------------------------------------------------------
 #
-#  CONTENTS      : Raw nanopore signal repeat detection pipeline
+#  CONTENTS      : STRique
 #
-#  DESCRIPTION   :
+#  DESCRIPTION   : Raw nanopore signal repeat detection pipeline
 #
 #  RESTRICTIONS  : none
 #
