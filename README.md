@@ -1,5 +1,7 @@
 # STRique
-[![Build Status](https://travis-ci.org/giesselmann/STRique.svg?branch=master)](https://travis-ci.org/giesselmann/STRique) [![Latest GitHub release](https://img.shields.io/github/release-pre/giesselmann/STRique.svg)](https://github.com/giesselmann/STRique/releases/latest) [![Docker Automated build](https://img.shields.io/docker/automated/giesselmann/strique.svg)](https://hub.docker.com/r/giesselmann/strique/)
+[![Latest GitHub release](https://img.shields.io/github/release-pre/giesselmann/STRique.svg)](https://github.com/giesselmann/STRique/releases/latest) 
+[![Build Status](https://travis-ci.org/giesselmann/STRique.svg?branch=master)](https://travis-ci.org/giesselmann/STRique) 
+[![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/giesselmann/strique.svg)](https://hub.docker.com/r/giesselmann/strique/)
 
 STRique is a nanopore raw signal repeat detection pipeline
 
