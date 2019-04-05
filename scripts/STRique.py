@@ -47,8 +47,7 @@ from collections import namedtuple, defaultdict
 from skimage.morphology import opening, closing, dilation, erosion, rectangle
 from multiprocessing import Pool, Process, Event, Value, Queue
 # private imports
-import fast5Index
-import pyseqan
+from STRique_lib import fast5Index, pyseqan
 
 
 
@@ -681,7 +680,7 @@ class mt_dispatcher():
 
 
 
- # parse config.json
+# parse config.json
 def parse_config(repeat_config_file, param_config_file=None):
     config = {}
     # parse repeat config
@@ -720,6 +719,7 @@ def parse_config(repeat_config_file, param_config_file=None):
 
 
 
+# main class
 class main():
     def __init__(self):
         parser = argparse.ArgumentParser(
