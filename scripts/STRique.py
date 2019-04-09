@@ -32,11 +32,11 @@
 # Written by Pay Giesselmann
 # ---------------------------------------------------------------------------------
 # public imports
-import os, sys, json, argparse
-import re
-import signal
-import queue
-import itertools
+import os, sys, traceback, json, argparse
+import re, itertools
+import datetime
+import threading, queue
+import enum
 import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
@@ -48,6 +48,66 @@ from skimage.morphology import opening, closing, dilation, erosion, rectangle
 from multiprocessing import Pool, Process, Event, Value, Queue
 # private imports
 from STRique_lib import fast5Index, pyseqan
+
+
+
+
+# simple parallel logging
+class logger():
+    logs = [sys.stderr]
+    class log_type(enum.Enum):
+        Error = "[ERROR]"
+        Warning = "[WARNING]"
+        Info = "[INFO]"
+        Debug = "[DEBUG]"
+    log_types = []
+    lock = threading.Lock()
+    log_queue = Queue()
+    
+    def __logger__():
+        while True:
+            print_message = logger.log_queue.get()
+            if not print_message:
+                break
+            for log in logger.logs:
+                if isinstance(log, str):
+                    with open(log, 'a') as fp:
+                        print(print_message, file = fp)
+                else:
+                    print(print_message, file = log)
+                    sys.stderr.flush()
+    
+    def init(file=None, log_level='info'):
+        if log_level == 'error':
+            logger.log_types = [logger.log_type.Error]
+        elif log_level == 'warning':
+            logger.log_types = [logger.log_type.Error, logger.log_type.Warning]
+        elif log_level == 'info':
+            logger.log_types = [logger.log_type.Error, logger.log_type.Warning, logger.log_type.Info]
+        else:
+            logger.log_types = [logger.log_type.Error, logger.log_type.Warning, logger.log_type.Info, logger.log_type.Debug]
+        if file:
+            if os.path.isfile(file) and os.access(file, os.W_OK) or os.access(os.path.abspath(os.path.dirname(file)), os.W_OK):
+                logger.logs.append(file)
+        
+        logger.log_runner = Process(target=logger.__logger__, )
+        logger.log_runner.start()
+        logger.log("Logger created.")
+        if file and len(logger.logs) == 1:
+            logger.log("Log-file {file} is not accessible".format(file=file), logger.log_type.Error)
+            
+    def close():
+        logger.log_queue.put(None)
+        logger.log_queue.close()
+        logger.log_runner.join()
+
+    def log(message, type=log_type.Info):
+        with logger.lock:
+            if type in logger.log_types:
+                print_message = ' '.join([datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "[PID {}]".format(os.getpid()), str(type.value), message])
+                logger.log_queue.put(print_message)
+            else:
+                print(type.value, ' not in ', logger.log_types, file=sys.stderr) 
 
 
 
@@ -445,8 +505,9 @@ class repeatCounter(object):
                 self.pm.generate_signal(self.__reverse_complement__(prefix_ext), samples=self.samples),
                 flankedRepeatHMM(self.__reverse_complement__(repeat), self.__reverse_complement__(suffix), self.__reverse_complement__(prefix), self.pm, self.HMM_config))
             self.targets[target_name] = (tc_plus, tc_minus)
+            logger.log("RepeatCounter: Added target {}".format(target_name), logger.log_type.Info)
         else:
-            raise ValueError("[repeatCounter] Target with name " + str(target_name) + " already defined")
+            raise ValueError("RepeatCounter: Target with name " + str(target_name) + " already defined.")
 
     def detect(self, target_name, raw_signal, strand):
         if target_name in self.targets:
@@ -456,7 +517,7 @@ class repeatCounter(object):
             elif strand == '-':
                 tc = tc_minus
             else:
-                ValueError("[repeatCounter] Strand must be + or -")
+                raise ValueError("RepeatCounter: Strand must be + or -.")
             flt_signal = sp.medfilt(raw_signal, kernel_size=3)
             nrm_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
             nrm_signal = np.clip(nrm_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
@@ -482,7 +543,7 @@ class repeatCounter(object):
             # plt.show()
             return n, score_prefix, score_suffix, p, prefix_end, suffix_begin - prefix_end
         else:
-            raise ValueError("[repeatCounter] Target with name " + str(target_name) + " not defined")
+            raise ValueError("RepeatCounter: Target with name " + str(target_name) + " not defined.")
 
 
 
@@ -551,16 +612,22 @@ class repeatDetector(object):
         sam_record = self.__decode_sam__(sam_line)
         f5_record = self.f5.raw(sam_record.QNAME)
         target_counts = []
-        if sam_record and f5_record is not None:
+        if sam_record.QNAME and f5_record is not None:
             if sam_record.FLAG & 0x10 == 0:
                 strand = '+'
             else:
                 strand = '-'
             target_names = self.__intersect_target__(sam_record)
+            logger.log("Detector: Test {id} for targets: {targets}.".format(id=sam_record.QNAME, targets=','.join(target_names)), logger.log_type.Debug)
             for target_name in target_names:
                 repeat_count = self.repeatCounter.detect(target_name, f5_record, strand)
                 target_counts.append((sam_record.QNAME, target_name, strand, *repeat_count))
             return {'target_counts': target_counts}
+        elif f5_record is None:
+            logger.log("Detector: No fast5 for ID {id}".format(id=sam_record.QNAME), logger.log_type.Warning)
+        else:
+            logger.log("Detector: Error parsing alignment \n{}".format(sam_line), logger.log_type.Error)
+            
 
 
 
@@ -617,14 +684,21 @@ class mt_dispatcher():
                         self.collector_queue.put(input)
                         self.collector_queue.put('done')
                 except KeyboardInterrupt:
+                    logger.log("Factory: Worker terminating on user request.", logger.log_type.Info)
                     break
-                except:
+                except Exception as e:
+                    type, value, trace = sys.exc_info()
+                    logger.log('\n'.join(["Factory: Unexpected error in Worker, proceeding wiht remaining reads."] +
+                                            traceback.format_exception(*sys.exc_info())), logger.log_type.Warning)
                     pass
         except KeyboardInterrupt:
             self.collector_queue.put(None)
+            self.collector_queue.close()
+            logger.log("Factory: Worker terminating on user request.", logger.log_type.Info)
             return
         self.collector_queue.put(None)
         self.collector_queue.close()
+        logger.log("Factory: Worker terminating.", logger.log_type.Debug)
 
     def __collector__(self):
         poison_count = self.n_worker
@@ -643,12 +717,14 @@ class mt_dispatcher():
                     input = collector_callable(**input)
                 self.output_queue.put(input)
         except KeyboardInterrupt:
+            logger.log("Factory: Collector terminating on user request.", logger.log_type.Info)
             pass
         except:
-            print("Error in collector", file=sys.stderr)
+            logger.log("Factory: Unexpected error in collector, terminating.", logger.log_type.Error)
             pass
         self.output_queue.put(None)
         self.output_queue.close()
+        logger.log("Factory: Collector terminating.", logger.log_type.Debug)
 
     def __stop__(self):
         for w in self.worker:
@@ -658,6 +734,7 @@ class mt_dispatcher():
             w.join()
         self.collector_queue.close()
         self.collector.join()
+        logger.log("Factory: Terminated.", logger.log_type.Debug)
 
     def __iter__(self):
         return self
@@ -692,8 +769,7 @@ def parse_config(repeat_config_file, param_config_file=None):
             if len(cols) == 7:
                 repeats[cols[3]] = (cols[0], int(cols[1]), int(cols[2]), cols[4], cols[5], cols[6])
             else:
-                print("[Config] Repeat config column mismatch while parsing", file=sys.stderr)
-                print("[Config] " + line, file=sys.stderr)
+                logger.log("Config: Repeat config column mismatch while parsing \n{line}".format(line=line), logger.log_type.Error)
     config['repeat'] = repeats
     config['align'] = None
     config['HMM'] = None
@@ -709,10 +785,10 @@ def parse_config(repeat_config_file, param_config_file=None):
             config['align'] = ld_conf['align']
             config['HMM'] = ld_conf['HMM']
         except KeyError as e:
-            print('[Config] Error loading HMM config file, missing', e.args[0], file=sys.stderr)
+            logger.log('Config: Error loading HMM config file, missing {}'.format(e.args[0]), logger.log_type.Error)
             exit(1)
         except AssertionError as e:
-            print('[Config] Config file format broken', file=sys.stderr)
+            logger.log('Config: file format broken', logger.log_type.Error)
             exit(1)
     return config
 
@@ -757,12 +833,15 @@ Available commands are:
         parser.add_argument("--algn", default=None, help="alignment in sam format, if not given read from stdin")
         parser.add_argument("--config", help="Config file with HMM transition probabilities")
         parser.add_argument("--t", type=int, default=1, help="Number of processes to use in parallel")
+        parser.add_argument("--log_level", default='warning', choices=['error', 'warning', 'info', 'debug'], help="Detailed output")
         args = parser.parse_args(argv)
+        logger.init(log_level=args.log_level)
         # load config
         config = parse_config(args.repeat, args.config)
+        logger.log("Main: Parsed config.", logger.log_type.Debug)
         # index/load reads
         if not os.path.isfile(args.f5Index):
-            print("[MAIN] Fast5 index file does not exist.", file=sys.stderr)
+            logger.log("Main: Fast5 index file does not exist.", log_type.Error)
             exit(-1)
         # repeat detector
         rd = repeatDetector(config['repeat'], args.model, args.f5Index, align_config=config['align'], HMM_config=config['HMM'])
@@ -780,6 +859,7 @@ Available commands are:
                 if not line.startswith('@'):
                     sam_queue.put({'sam_line': line})
         mt.close()
+        logger.close()
 
 
 

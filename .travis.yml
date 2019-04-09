@@ -75,3 +75,5 @@ install:
     
 script: 
   - python scripts/STRique_test.py 
+  - python scripts/STRique.py index data/ > data/reads.fofn
+  - cat data/c9orf72.sam | python3 scripts/STRique.py count data/reads.fofn models/template_median68pA6mer.model configs/repeat_config.tsv --config configs/STRique.json --log_level debug
