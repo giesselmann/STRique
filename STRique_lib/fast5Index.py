@@ -217,8 +217,8 @@ class fast5Index():
         elif target_file[1] == '.fast5':    # bulk fast5
             return self.__get_raw__(os.path.join(self.index_dir, target_file[0] + '.fast5'), ID, offset=target_file[2])
         else:                               # single read batch
-            with tempfile.TemporaryDirectory(prefix=self.tmp_prefix) as tmpdirname, tarfile.open(target_file[0] + '.tar') as fp_tar:
-                tar_members = fp_tar.getmember(target_file[3])
+            with tempfile.TemporaryDirectory(prefix=self.tmp_prefix) as tmpdirname, tarfile.open(os.path.join(self.index_dir, target_file[0] + '.tar')) as fp_tar:
+                tar_member = fp_tar.getmember(target_file[2])
                 fp_tar.extract(tar_member, path=tmpdirname)
                 return self.__get_raw__(os.path.join(tmpdirname, tar_member.name), ID)
 

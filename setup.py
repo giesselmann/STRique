@@ -37,7 +37,7 @@ import sys
 import platform
 import subprocess
 
-from setuptools import setup, Extension
+from setuptools import setup, Extension, find_packages
 from setuptools.command.build_ext import build_ext
 from distutils.version import LooseVersion
 
@@ -96,7 +96,8 @@ setup(
     author_email='giesselmann@molgen.mpg.de',
     description='Nanopore raw signal repeat detection',
     long_description='',
-    ext_modules=[CMakeExtension('pyseqan')],
+    packages=find_packages(),
+    ext_modules=[CMakeExtension('STRique_lib.pyseqan')],
     cmdclass=dict(build_ext=CMakeBuild),
     python_requires='>=3.5',
     zip_safe=False,
