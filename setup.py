@@ -91,7 +91,7 @@ class CMakeBuild(build_ext):
 
 setup(
     name='STRique',
-    version='0.2.0',
+    version='0.2.1',
     author='Pay Giesselmann',
     author_email='giesselmann@molgen.mpg.de',
     description='Nanopore raw signal repeat detection',
