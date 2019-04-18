@@ -82,6 +82,16 @@ class fast5Index():
             except:
                 raise RuntimeError("[ERROR] Could not retrieve {ID} from file {file}.".format(ID=ID, file=f5_file))
         return signal
+        
+    def __set_raw__(self, f5_file, ID, signal, offset=""):
+        with h5py.File(f5_file, 'r+') as fp:
+            try:
+                s = fp[os.path.join(offset, 'Raw')].visit(lambda name: name if 'Signal' in name else None)
+                del fp[os.path.join(offset, 'Raw', s)]
+                ds = fp.create_dataset(os.path.join(offset, 'Raw', s), data=signal)
+                ds.parent.attrs['duration'] = len(signal)
+            except:
+                raise RuntimeError("[ERROR] Could not set signal for {ID} in file {file}.".format(ID=ID, file=f5_file))
 
     def __copy_reads_to__(self, read_ids, output):
         if not os.path.exists(output):
@@ -207,10 +217,10 @@ class fast5Index():
         else:
             raise RuntimeError('[ERROR] Raw fast5 batch extension {} not supported.'.format(batch_ext))
 
-    def raw(self, ID):
+    def get_raw(self, ID):
         assert self.index_dict
         if not ID in self.index_dict:
-            raise RuntimeError("[Error] Read {ID} not found in {index}.".format(ID+ID, index=self.index_file))
+            raise RuntimeError("[Error] Read {ID} not found in {index}.".format(ID=ID, index=self.index_file))
         target_file = re.split('(\.fast5|\.tar)\/', self.index_dict[ID])
         if len(target_file) == 1:           # single read file
             return self.__get_raw__(os.path.join(self.index_dir, target_file[0]), ID)
@@ -222,8 +232,17 @@ class fast5Index():
                 fp_tar.extract(tar_member, path=tmpdirname)
                 return self.__get_raw__(os.path.join(tmpdirname, tar_member.name), ID)
 
-
-
+    def set_raw(self, ID, signal):
+        assert self.index_dict
+        if not ID in self.index_dict:
+            raise RuntimeError("[Error] Read {ID} not found in {index}.".format(ID+ID, index=self.index_file))
+        target_file = re.split('(\.fast5|\.tar)\/', self.index_dict[ID])
+        if len(target_file) == 1:           # single read file
+            self.__set_raw__(os.path.join(self.index_dir, target_file[0]), ID, signal)
+        elif target_file[1] == '.fast5':    # bulk fast5
+            self.__set_raw__(os.path.join(self.index_dir, target_file[0] + '.fast5'), ID, signal, offset=target_file[2])
+        else:
+            raise RuntimeError("[Error] setting raw signal only supported in single and bulk fast5.")
 
 
 class main():

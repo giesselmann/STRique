@@ -63,7 +63,7 @@ class logger():
     log_types = []
     lock = threading.Lock()
     log_queue = Queue()
-    
+
     def __logger__():
         while True:
             print_message = logger.log_queue.get()
@@ -76,7 +76,7 @@ class logger():
                 else:
                     print(print_message, file = log)
                     sys.stderr.flush()
-    
+
     def init(file=None, log_level='info'):
         if log_level == 'error':
             logger.log_types = [logger.log_type.Error]
@@ -89,13 +89,13 @@ class logger():
         if file:
             if os.path.isfile(file) and os.access(file, os.W_OK) or os.access(os.path.abspath(os.path.dirname(file)), os.W_OK):
                 logger.logs.append(file)
-        
+
         logger.log_runner = Process(target=logger.__logger__, )
         logger.log_runner.start()
         logger.log("Logger created.")
         if file and len(logger.logs) == 1:
             logger.log("Log-file {file} is not accessible".format(file=file), logger.log_type.Error)
-            
+
     def close():
         logger.log_queue.put(None)
         logger.log_queue.close()
@@ -106,8 +106,6 @@ class logger():
             if type in logger.log_types:
                 print_message = ' '.join([datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "[PID {}]".format(os.getpid()), str(type.value), message])
                 logger.log_queue.put(print_message)
-            else:
-                print(type.value, ' not in ', logger.log_types, file=sys.stderr) 
 
 
 
@@ -541,7 +539,7 @@ class repeatCounter(object):
             # ax[0].axvline(suffix_end, color='lime')
             # ax[1].plot(np.arange(prefix_begin, suffix_end), path, 'b-')
             # plt.show()
-            return n, score_prefix, score_suffix, p, prefix_end, suffix_begin - prefix_end
+            return n, score_prefix, score_suffix, p, prefix_end, max(suffix_begin - prefix_end, 0)
         else:
             raise ValueError("RepeatCounter: Target with name " + str(target_name) + " not defined.")
 
@@ -609,25 +607,30 @@ class repeatDetector(object):
     def detect(self, sam_line=''):
         if not self.is_init:
             self.__init_hmm__()
-        sam_record = self.__decode_sam__(sam_line)
-        f5_record = self.f5.raw(sam_record.QNAME)
         target_counts = []
-        if sam_record.QNAME and f5_record is not None:
-            if sam_record.FLAG & 0x10 == 0:
-                strand = '+'
-            else:
-                strand = '-'
-            target_names = self.__intersect_target__(sam_record)
-            logger.log("Detector: Test {id} for targets: {targets}.".format(id=sam_record.QNAME, targets=','.join(target_names)), logger.log_type.Debug)
-            for target_name in target_names:
-                repeat_count = self.repeatCounter.detect(target_name, f5_record, strand)
-                target_counts.append((sam_record.QNAME, target_name, strand, *repeat_count))
-            return {'target_counts': target_counts}
-        elif f5_record is None:
-            logger.log("Detector: No fast5 for ID {id}".format(id=sam_record.QNAME), logger.log_type.Warning)
-        else:
+        sam_record = self.__decode_sam__(sam_line)
+        if not sam_record.QNAME:
             logger.log("Detector: Error parsing alignment \n{}".format(sam_line), logger.log_type.Error)
-            
+            return None
+        target_names = self.__intersect_target__(sam_record)
+        if not target_names:
+            logger.log("Detector: No target for {}".format(sam_record.QNAME), logger.log_type.Debug)
+            return None
+        f5_record = self.f5.get_raw(sam_record.QNAME)
+        if f5_record is None:
+            logger.log("Detector: No fast5 for ID {id}".format(id=sam_record.QNAME), logger.log_type.Warning)
+            return None
+        if sam_record.FLAG & 0x10 == 0:
+            strand = '+'
+        else:
+            strand = '-'
+        logger.log("Detector: Test {id} for targets: {targets}.".format(id=sam_record.QNAME, targets=','.join(target_names)), logger.log_type.Debug)
+        for target_name in target_names:
+            repeat_count = self.repeatCounter.detect(target_name, f5_record, strand)
+            target_counts.append((sam_record.QNAME, target_name, strand, *repeat_count))
+        return {'target_counts': target_counts}
+
+
 
 
 
