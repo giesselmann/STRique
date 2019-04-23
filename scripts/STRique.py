@@ -599,14 +599,12 @@ class repeatCounter(object):
             trim_suffix = len(tc.suffix_ext) - len(tc.suffix)
             score_prefix, prefix_begin, prefix_end = self.__detect_range__(nrm_signal, tc.prefix_ext, pre_trim=trim_prefix)
             score_suffix, suffix_begin, suffix_end = self.__detect_range__(nrm_signal, tc.suffix_ext, post_trim=trim_suffix)
-            n = 0; p = 0; states = []
+            n = 0; p = 0; states = []; mod_pattern = '-'
             if prefix_begin < suffix_end and score_prefix > 0.0 and score_suffix > 0.0:
                 n, p, states = self.__detect_short__(tc.repeatHMM, flt_signal[prefix_begin:suffix_end])
                 if self.pm != self.pm_mod:
                     rep_signal = flt_signal[prefix_begin:suffix_end][np.array([True if 'repeat' in x else False for x in states])]
                     mod_pattern = tc.modHMM.mod_repeats(rep_signal)
-                else:
-                    mod_pattern = '-'
             # f, ax = plt.subplots(2, sharex=True)
             # ax[0].plot(flt_signal, 'k-')
             # ax[0].axvline(prefix_begin, color='red')
