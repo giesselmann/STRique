@@ -143,6 +143,11 @@ class pore_model():
     def MAD(self, signal):
         return np.mean(np.absolute(np.subtract(signal, np.median(signal))))
 
+    def scale2stdv(self, other):
+        self_median = np.median(np.array([x[1] for x in self.model_dict.values()]))
+        other_median = np.median(np.array([x[1] for x in other.model_dict.values()]))
+        return other_median / self_median
+
     def normalize2model(self, signal, clip=True, mode='median'):
         if mode == 'minmax':
             model_values = np.array([x[0] for x in self.model_dict.values()])
@@ -465,7 +470,7 @@ class repeatModHMM(pg.HiddenMarkovModel):
         self.s0 = pg.State(pg.UniformDistribution(self.model_min, self.model_max), name='s0')
         self.e0 = pg.State(pg.UniformDistribution(self.model_min, self.model_max), name='e0')
         self.base_model = profileHMM(repeat, self.pore_model_base, self.transition_probs, state_prefix='base', no_silent=True, std_scale=self.transition_probs['rep_std_scale'], std_offset=self.transition_probs['rep_std_offset'])
-        self.mod_model = profileHMM(repeat, self.pore_model_mod, self.transition_probs, state_prefix='mod', no_silent=True, std_scale=self.transition_probs['rep_std_scale'], std_offset=self.transition_probs['rep_std_offset'])
+        self.mod_model = profileHMM(repeat, self.pore_model_mod, self.transition_probs, state_prefix='mod', no_silent=True, std_scale=self.transition_probs['rep_std_scale'] * self.pore_model_mod.scale2stdv(self.pore_model_base), std_offset=self.transition_probs['rep_std_offset'])
         self.add_model(self.base_model)
         self.add_model(self.mod_model)
         self.add_state(self.s0)
