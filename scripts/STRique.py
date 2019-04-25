@@ -448,7 +448,7 @@ class flankedRepeatHMM(pg.HiddenMarkovModel):
 class repeatModHMM(pg.HiddenMarkovModel):
     def __init__(self, repeat, pm_base, pm_mod, config=None):
         super().__init__()
-        self.transition_probs = {'rep_std_scale': 1.0,
+        self.transition_probs = {'rep_std_scale': 1.5,
                                  'rep_std_offset': 0.0,
                                  'leave_repeat': .002}
         if config and isinstance(config, dict):
@@ -553,10 +553,11 @@ class repeatCounter(object):
 
     def add_target(self, target_name, repeat, prefix, suffix):
         if not target_name in self.targets:
-            prefix_ext = prefix
-            prefix = prefix[-50:]
-            suffix_ext = suffix
-            suffix = suffix[:50]
+            prefix_ext = prefix.upper()
+            prefix = prefix[-50:].upper()
+            suffix_ext = suffix.upper()
+            suffix = suffix[:50].upper()
+            repeat = repeat.upper()
             # template model
             tc_plus = self.target_classifier(
                 self.pm.generate_signal(prefix, samples=self.samples),
@@ -588,31 +589,31 @@ class repeatCounter(object):
             else:
                 raise ValueError("RepeatCounter: Strand must be + or -.")
             flt_signal = sp.medfilt(raw_signal, kernel_size=3)
-            nrm_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
-            nrm_signal = np.clip(nrm_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
+            morph_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
+            morph_signal = np.clip(morph_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(morph_signal)))
             flt = rectangle(1, 8)
-            nrm_signal = opening(nrm_signal, flt)
-            nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
-            nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), mode='minmax')
+            morph_signal = opening(morph_signal, flt)
+            morph_signal = closing(morph_signal, flt)[0].astype(np.dtype('float'))
+            morph_signal = self.pm.normalize2model(morph_signal.astype(np.dtype('float')), mode='minmax')
             flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')), mode='minmax')
             trim_prefix = len(tc.prefix_ext) - len(tc.prefix)
             trim_suffix = len(tc.suffix_ext) - len(tc.suffix)
-            score_prefix, prefix_begin, prefix_end = self.__detect_range__(nrm_signal, tc.prefix_ext, pre_trim=trim_prefix)
-            score_suffix, suffix_begin, suffix_end = self.__detect_range__(nrm_signal, tc.suffix_ext, post_trim=trim_suffix)
+            score_prefix, prefix_begin, prefix_end = self.__detect_range__(morph_signal, tc.prefix_ext, pre_trim=trim_prefix)
+            score_suffix, suffix_begin, suffix_end = self.__detect_range__(morph_signal, tc.suffix_ext, post_trim=trim_suffix)
             n = 0; p = 0; states = []; mod_pattern = '-'
             if prefix_begin < suffix_end and score_prefix > 0.0 and score_suffix > 0.0:
                 n, p, states = self.__detect_short__(tc.repeatHMM, flt_signal[prefix_begin:suffix_end])
                 if self.pm != self.pm_mod:
-                    rep_signal = flt_signal[prefix_begin:suffix_end][np.array([True if 'repeat' in x else False for x in states])]
+                    #rep_signal = flt_signal[prefix_begin:suffix_end][np.array([True if 'repeat' in x else False for x in states])]
+                    nrm_signal = self.pm.normalize2model(raw_signal.astype(np.dtype('float')), mode='minmax')
+                    rep_signal = nrm_signal[prefix_begin:suffix_end][np.array([True if 'repeat' in x else False for x in states])]
                     mod_pattern = tc.modHMM.mod_repeats(rep_signal)
-            # f, ax = plt.subplots(2, sharex=True)
-            # ax[0].plot(flt_signal, 'k-')
-            # ax[0].axvline(prefix_begin, color='red')
-            # ax[0].axvline(prefix_end, color='red')
-            # ax[0].axvline(suffix_begin, color='lime')
-            # ax[0].axvline(suffix_end, color='lime')
-            # ax[1].plot(np.arange(prefix_begin, suffix_end), path, 'b-')
-            # plt.show()
+                    # import matplotlib.pyplot as plt
+                    # f, ax = plt.subplots(2, sharex=True)
+                    # ax[0].plot(raw_signal[prefix_begin:suffix_end][np.array([True if 'repeat' in x else False for x in states])], 'k-')
+                    # ax[1].plot(rep_signal, 'k-')
+                    # ax[0].set_title('Count {count}, strand {strand}'.format(count=n, strand=strand))
+                    # plt.show()
             return n, score_prefix, score_suffix, p, prefix_end, max(suffix_begin - prefix_end, 0), mod_pattern
         else:
             raise ValueError("RepeatCounter: Target with name " + str(target_name) + " not defined.")
@@ -686,6 +687,10 @@ class repeatDetector(object):
         if not sam_record.QNAME:
             logger.log("Detector: Error parsing alignment \n{}".format(sam_line), logger.log_type.Error)
             return None
+        if sam_record.FLAG & 0x10 == 0:
+            strand = '+'
+        else:
+            strand = '-'
         target_names = self.__intersect_target__(sam_record)
         if not target_names:
             logger.log("Detector: No target for {}".format(sam_record.QNAME), logger.log_type.Debug)
@@ -694,10 +699,6 @@ class repeatDetector(object):
         if f5_record is None:
             logger.log("Detector: No fast5 for ID {id}".format(id=sam_record.QNAME), logger.log_type.Warning)
             return None
-        if sam_record.FLAG & 0x10 == 0:
-            strand = '+'
-        else:
-            strand = '-'
         logger.log("Detector: Test {id} for targets: {targets}.".format(id=sam_record.QNAME, targets=','.join(target_names)), logger.log_type.Debug)
         for target_name in target_names:
             repeat_count = self.repeatCounter.detect(target_name, f5_record, strand)
@@ -918,14 +919,14 @@ Available commands are:
         # index/load reads
         if not os.path.isfile(args.f5Index):
             logger.log("Main: Fast5 index file does not exist.", logger.log_type.Error)
-            exit(-1)
+            exit(1)
         # model files
         if not os.path.isfile(args.model):
             logger.log("Main: Pore model file does not exist.", logger.log_type.Error)
-            exit(-1)
+            exit(1)
         if args.mod_model and not os.path.isfile(args.mod_model):
             logger.log("Main: Modification pore model file does not exist.", logger.log_type.Error)
-            exit(-1)
+            exit(1)
         # repeat detector
         rd = repeatDetector(config['repeat'], args.model, args.f5Index, mod_model_file=args.mod_model, align_config=config['align'], HMM_config=config['HMM'])
         ow = outputWriter(args.out)
