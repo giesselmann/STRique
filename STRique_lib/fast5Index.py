@@ -82,7 +82,7 @@ class fast5Index():
             except:
                 raise RuntimeError("[ERROR] Could not retrieve {ID} from file {file}.".format(ID=ID, file=f5_file))
         return signal
-        
+
     def __set_raw__(self, f5_file, ID, signal, offset=""):
         with h5py.File(f5_file, 'r+') as fp:
             try:

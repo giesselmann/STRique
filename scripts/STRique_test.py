@@ -45,7 +45,7 @@ import STRique
 class DetectionTest(unittest.TestCase):
     # Test if pipeline is able to quantify repeat count for hexamere repeat GGCCCC
     def test_Detection(self):
-        model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'template_median68pA6mer.model')
+        model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'r9_4_450bps.model')
         pm = STRique.pore_model(model_file)
         backbone = ''.join(random.choice('ACTG') for _ in range(2000))
         prefix = 'CGGCAGCCGAACCCCAAACAGCCACCCGCCAGGATGCCGCCTCCTCACTCACCCACTCGCCACCGCCTGCGCCTCCGCCGCCGCGGGCGCAGGCACCGCAACCGCAGCCCCGCCCCGGGCCCGCCCCCGGGCCCGCCCCGACCACGCCCC'
@@ -58,14 +58,14 @@ class DetectionTest(unittest.TestCase):
             print('Test repeat length:', i)
             seq = backbone[:1000] + prefix + repeat * i + suffix + backbone[-1000:]
             sig = pm.generate_signal(seq, samples=8)
-            n, score_prefix, score_suffix, p, offset, ticks = dt.detect('c9orf72', sig, '+')
+            n, score_prefix, score_suffix, p, offset, ticks, mod_pattern = dt.detect('c9orf72', sig, '+')
             self.assertEqual(n, i)
             #print('Expected: ', i, ' detected: ', n)
 
     # Test special case of repeats shorter than kmer in pore model
     # this requires interpolation and limits detection resolution
     def test_Interpolation(self):
-        model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'template_median68pA6mer.model')
+        model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'r9_4_450bps.model')
         pm = STRique.pore_model(model_file)
         backbone = ''.join(random.choice('ACTG') for _ in range(2000))
         prefix = 'AGCGGGCCGGGGGTTCGGCCTCAGTCAGGCGCTCAGCTCCGTTTCGGTTTCACTTCCGGTGGAGGGCCGCCTCTGAGCGGGCGGCGGGCCGACGGCGAGCGCGGGCGGCGGCGGTGACGGAGGCGCCGCTGCCAGGGGGCGTGCGGCAGC'
@@ -78,12 +78,13 @@ class DetectionTest(unittest.TestCase):
             print('Test repeat length:', i)
             seq = backbone[:1000] + prefix + repeat * i + suffix + backbone[-1000:]
             sig = pm.generate_signal(seq, samples=8)
-            n, score_prefix, score_suffix, p, offset, ticks = dt.detect('fmr1', sig, '+')
+            n, score_prefix, score_suffix, p, offset, ticks, mod_pattern = dt.detect('fmr1', sig, '+')
             self.assertEqual(n, i)
             #print('Expected: ', i, ' detected: ', n)
 
-    def test_normalization(self):
-        model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'template_median68pA6mer.model')
+    # test normalization for short prefix/suffix sequences
+    def test_Normalization(self):
+        model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'r9_4_450bps.model')
         pm = STRique.pore_model(model_file)
         prefix = 'CGGCAGCCGAACCCCAAACAGCCACCCGCCAGGATGCCGCCTCCTCACTCACCCACTCGCCACCGCCTGCGCCTCCGCCGCCGCGGGCGCAGGCACCGCAACCGCAGCCCCGCCCCGGGCCCGCCCCCGGGCCCGCCCCGACCACGCCCC'
         suffix = 'TAGCGCGCGACTCCTGAGTTCCAGAGCTTGCTACAGGCTGCGGTTGTTTCCCTCCTTGTTTTCTTCTGGTTAATCTTTATCAGGTCTTTTCTTGTTCACCCTCAGCGAGTACTGTGAGAGCAAGTAGTGGGGAGAGAGGGTGGGAAAAAC'
@@ -95,9 +96,32 @@ class DetectionTest(unittest.TestCase):
             print('Test repeat length:', i)
             seq = prefix + repeat * i + suffix
             sig = pm.generate_signal(seq, samples=8)
-            n, score_prefix, score_suffix, p, offset, ticks = dt.detect('c9orf72', sig, '+')
+            n, score_prefix, score_suffix, p, offset, ticks, mod_pattern = dt.detect('c9orf72', sig, '+')
             self.assertEqual(n, i)
             #print('Expected: ', i, ' detected: ', n)
+
+    # test base modification function
+    def test_Modification(self):
+        model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'r9_4_450bps.model')
+        mod_model_file = os.path.join( os.path.dirname(os.path.realpath(__file__)), '..', 'models', 'r9_4_450bps_mCpG.model')
+        pm = STRique.pore_model(model_file)
+        pm_mod = STRique.pore_model(mod_model_file)
+        backbone = ''.join(random.choice('ACTG') for _ in range(2000))
+        prefix = 'CGGCAGCCGAACCCCAAACAGCCACCCGCCAGGATGCCGCCTCCTCACTCACCCACTCGCCACCGCCTGCGCCTCCGCCGCCGCGGGCGCAGGCACCGCAACCGCAGCCCCGCCCCGGGCCCGCCCCCGGGCCCGCCCCGACCACGCCCC'
+        suffix = 'TAGCGCGCGACTCCTGAGTTCCAGAGCTTGCTACAGGCTGCGGTTGTTTCCCTCCTTGTTTTCTTCTGGTTAATCTTTATCAGGTCTTTTCTTGTTCACCCTCAGCGAGTACTGTGAGAGCAAGTAGTGGGGAGAGAGGGTGGGAAAAAC'
+        repeat = 'GGCCCC'
+        dt = STRique.repeatCounter(model_file, mod_model_file=mod_model_file)
+        dt.add_target('c9orf72', repeat, prefix, suffix)
+        print('Test GGCCCC repeat')
+        for i in range(100, 301, 100):
+            print('Test repeat length:', i)
+            seq = backbone[:1000] + prefix + repeat * i + suffix + backbone[-1000:]
+            sig_base = pm.generate_signal(seq, samples=8, noise=True)
+            n, score_prefix, score_suffix, p, offset, ticks, mod_pattern_base = dt.detect('c9orf72', sig_base, '+')
+            sig_mod = pm_mod.generate_signal(seq, samples=8, noise=True)
+            n, score_prefix, score_suffix, p, offset, ticks, mod_pattern_mod = dt.detect('c9orf72', sig_mod, '+')
+            #print("\n".join([mod_pattern_base, mod_pattern_mod]))
+            self.assertEqual(n, i)
 
 
 
