@@ -63,7 +63,7 @@ class logger():
     log_types = []
     lock = threading.Lock()
     log_queue = Queue()
-    
+
     def __logger__():
         while True:
             print_message = logger.log_queue.get()
@@ -76,7 +76,7 @@ class logger():
                 else:
                     print(print_message, file = log)
                     sys.stderr.flush()
-    
+
     def init(file=None, log_level='info'):
         if log_level == 'error':
             logger.log_types = [logger.log_type.Error]
@@ -89,13 +89,13 @@ class logger():
         if file:
             if os.path.isfile(file) and os.access(file, os.W_OK) or os.access(os.path.abspath(os.path.dirname(file)), os.W_OK):
                 logger.logs.append(file)
-        
+
         logger.log_runner = Process(target=logger.__logger__, )
         logger.log_runner.start()
         logger.log("Logger created.")
         if file and len(logger.logs) == 1:
             logger.log("Log-file {file} is not accessible".format(file=file), logger.log_type.Error)
-            
+
     def close():
         logger.log_queue.put(None)
         logger.log_queue.close()
@@ -106,8 +106,6 @@ class logger():
             if type in logger.log_types:
                 print_message = ' '.join([datetime.datetime.now().strftime("%d.%m.%Y %H:%M:%S"), "[PID {}]".format(os.getpid()), str(type.value), message])
                 logger.log_queue.put(print_message)
-            else:
-                print(type.value, ' not in ', logger.log_types, file=sys.stderr) 
 
 
 
@@ -115,17 +113,14 @@ class logger():
 # basic normalization and simulation
 class pore_model():
     def __init__(self, model_file):
-        model_data = np.genfromtxt(model_file, names=True, dtype=None, comments="#", encoding='UTF-8')
-        self.__model = {}
-        for state in model_data:
-            self.__model[state['kmer']] = (state['level_mean'], state['level_stdv'])
-        self.kmer = len(model_data['kmer'][0])
-        self.model_median = np.median(model_data['level_mean'])
-        self.model_MAD = np.mean(np.absolute(np.subtract(model_data['level_mean'], self.model_median)))
-        model_dict = {}
-        for state in model_data:
-            state_idx = state['kmer']
-            model_dict[state_idx] = (state['level_mean'], state['level_stdv'])
+        def model_iter(iterable):
+            for line in iterable:
+                yield line.strip().split('\t')[:3]
+        with open(model_file, 'r') as fp:
+            model_dict = {x[0]:(float(x[1]), float(x[2])) for x in model_iter(fp)}
+        self.kmer = len(next(iter(model_dict.keys())))
+        self.model_median = np.median([x[0] for x in model_dict.values()])
+        self.model_MAD = np.mean(np.absolute(np.subtract([x[0] for x in model_dict.values()], self.model_median)))
         min_state = min(model_dict.values(), key=lambda x:x[0])
         max_state = max(model_dict.values(), key=lambda x:x[0])
         self.model_min = min_state[0] - 6 * min_state[1]
@@ -147,6 +142,11 @@ class pore_model():
 
     def MAD(self, signal):
         return np.mean(np.absolute(np.subtract(signal, np.median(signal))))
+
+    def scale2stdv(self, other):
+        self_median = np.median(np.array([x[1] for x in self.model_dict.values()]))
+        other_median = np.median(np.array([x[1] for x in other.model_dict.values()]))
+        return other_median / self_median
 
     def normalize2model(self, signal, clip=True, mode='median'):
         if mode == 'minmax':
@@ -180,13 +180,19 @@ class pore_model():
             np.clip(nrm_signal, self.model_min + .5, self.model_max - .5, out=nrm_signal)
         return nrm_signal
 
-    def generate_signal(self, sequence, samples=10):
+    def generate_signal(self, sequence, samples=10, noise=False):
         signal = []
-        level_means = np.array([self.__model[kmer][0] for kmer in [sequence[i:i+self.kmer] for i in range(len(sequence)-self.kmer + 1)]])
-        if samples:
+        level_means = np.array([self.model_dict[kmer][0] for kmer in [sequence[i:i+self.kmer] for i in range(len(sequence)-self.kmer + 1)]])
+        if samples and not noise:
             sig = np.repeat(level_means, samples)
-        else:
+        elif not noise:
             sig = np.repeat(level_means, np.random.uniform(6, 10, len(level_means)).astype(int))
+        else:
+            level_stdvs = np.array([self.model_dict[kmer][1] for kmer in [sequence[i:i+self.kmer] for i in range(len(sequence)-self.kmer + 1)]])
+            level_samples = np.random.uniform(6, 10, len(level_means)).astype(int)
+            level_means = np.repeat(level_means, level_samples)
+            level_stdvs = np.repeat(level_stdvs, level_samples)
+            sig = np.random.normal(level_means, level_stdvs)
         return sig
 
 
@@ -406,8 +412,8 @@ class flankedRepeatHMM(pg.HiddenMarkovModel):
         suffix = ''.join([self.repeat] * int(np.ceil(self.pore_model.kmer / len(self.repeat)))) + self.suffix
         self.flanking_count = int(np.ceil(self.pore_model.kmer / len(self.repeat))) * 2 - 1
         self.prefix_model = profileHMM(prefix, self.pore_model, self.transition_probs, state_prefix='prefix', std_scale=self.transition_probs['seq_std_scale'], std_offset=self.transition_probs['seq_std_offset'])
-        self.suffix_model = profileHMM(suffix, self.pore_model, self.transition_probs, state_prefix='suffix', std_scale=self.transition_probs['rep_std_scale'], std_offset=self.transition_probs['seq_std_offset'])
-        self.repeat_model = repeatHMM(self.repeat, self.pore_model, self.transition_probs, state_prefix='repeat', std_scale=self.transition_probs['seq_std_scale'], std_offset=self.transition_probs['rep_std_offset'])
+        self.suffix_model = profileHMM(suffix, self.pore_model, self.transition_probs, state_prefix='suffix', std_scale=self.transition_probs['seq_std_scale'], std_offset=self.transition_probs['seq_std_offset'])
+        self.repeat_model = repeatHMM(self.repeat, self.pore_model, self.transition_probs, state_prefix='repeat', std_scale=self.transition_probs['rep_std_scale'], std_offset=self.transition_probs['rep_std_offset'])
         # add sub-modules, flanking and skip states
         self.add_model(self.prefix_model)
         self.add_model(self.repeat_model)
@@ -430,18 +436,75 @@ class flankedRepeatHMM(pg.HiddenMarkovModel):
         if path is not None:
             # repeat number equals loops in repeat model + 1 repeat in flanking sequences
             n = self.repeat_model.count_repeats(path) + self.flanking_count
-            path = np.array([x[0] for x in path])
-            path = path[path < self.silent_start]
+            path = [x[1].name for x in path if x[0] < self.silent_start]
             return n, p, path
         else:
-            return 0, 0, np.array([])
+            return 0, 0, []
 
+
+
+
+# repeat base modification detection
+class repeatModHMM(pg.HiddenMarkovModel):
+    def __init__(self, repeat, pm_base, pm_mod, config=None):
+        super().__init__()
+        self.transition_probs = {'rep_std_scale': 1.5,
+                                 'rep_std_offset': 0.0,
+                                 'leave_repeat': .002}
+        if config and isinstance(config, dict):
+            for key, value in config.items():
+                self.transition_probs[key] = value
+        self.pore_model_base = pm_base
+        self.pore_model_mod = pm_mod
+        self.repeat = repeat
+        self.__build_model__()
+
+    def __build_model__(self):
+        if len(self.repeat) >= self.pore_model_base.kmer:
+            repeat = self.repeat + self.repeat[: self.pore_model_base.kmer - 1]
+        else:
+            ext = self.pore_model_base.kmer - 1 + (len(self.repeat) - 1) - ((self.pore_model_base.kmer - 1) % len(self.repeat))
+            repeat = self.repeat + ''.join([self.repeat] * self.pore_model_base.kmer)[:ext]
+        self.model_min = min(self.pore_model_base.model_min, self.pore_model_mod.model_min)
+        self.model_max = max(self.pore_model_base.model_max, self.pore_model_mod.model_max)
+        self.s0 = pg.State(pg.UniformDistribution(self.model_min, self.model_max), name='s0')
+        self.e0 = pg.State(pg.UniformDistribution(self.model_min, self.model_max), name='e0')
+        self.base_model = profileHMM(repeat, self.pore_model_base, self.transition_probs, state_prefix='base', no_silent=True, std_scale=self.transition_probs['rep_std_scale'], std_offset=self.transition_probs['rep_std_offset'])
+        self.mod_model = profileHMM(repeat, self.pore_model_mod, self.transition_probs, state_prefix='mod', no_silent=True, std_scale=self.transition_probs['rep_std_scale'] * self.pore_model_mod.scale2stdv(self.pore_model_base), std_offset=self.transition_probs['rep_std_offset'])
+        self.add_model(self.base_model)
+        self.add_model(self.mod_model)
+        self.add_state(self.s0)
+        self.add_state(self.e0)
+        # transitions
+        self.add_transition(self.start, self.s0, 1)
+        self.add_transition(self.s0, self.base_model.s1, 0.25)
+        self.add_transition(self.s0, self.base_model.s2, 0.25)
+        self.add_transition(self.s0, self.mod_model.s1, 0.25)
+        self.add_transition(self.s0, self.mod_model.s2, 0.25)
+        self.add_transition(self.base_model.e1, self.e0, 1)
+        self.add_transition(self.base_model.e2, self.e0, 1)
+        self.add_transition(self.mod_model.e1, self.e0, 1)
+        self.add_transition(self.mod_model.e2, self.e0, 1)
+        self.add_transition(self.e0, self.end, self.transition_probs['leave_repeat'])
+        self.add_transition(self.e0, self.s0, 1-self.transition_probs['leave_repeat'])
+        # bake
+        self.bake(merge='All')
+
+    def mod_repeats(self, signal, **kwargs):
+        p, path = super().viterbi(np.clip(signal, self.model_min, self.model_max), **kwargs)
+        if path is not None:
+            states = [x[1].name for x in path if x[0] < self.silent_start]
+            states_gr = [next(g) for k,g in itertools.groupby(states, key=lambda x : False if x in ['s0', 'e0'] else True) if k]
+            pattern = ''.join(['1' if 'mod' in x else '0' for x in states_gr])
+            return pattern
+        else:
+            return '-'
 
 
 
 # main repeat detection methods
 class repeatCounter(object):
-    def __init__(self, model_file, align_config=None, HMM_config=None):
+    def __init__(self, model_file, mod_model_file=None, align_config=None, HMM_config=None):
         default_config =  {'dist_offset': 16.0,
                              'dist_min': 0.0,
                              'gap_open_h': -1.0,
@@ -460,10 +523,14 @@ class repeatCounter(object):
         self.algn.gap_extension_h = default_config['gap_extension_h']
         self.algn.gap_extension_v = default_config['gap_extension_v']
         self.pm = pore_model(model_file)
+        if mod_model_file:
+            self.pm_mod = pore_model(mod_model_file)
+        else:
+            self.pm_mod = self.pm
         self.samples = default_config['samples']
         self.HMM_config = HMM_config
         self.targets = {}
-        self.target_classifier = namedtuple('target_classifier', field_names=['prefix', 'suffix', 'prefix_ext', 'suffix_ext', 'repeatHMM'])
+        self.target_classifier = namedtuple('target_classifier', field_names=['prefix', 'suffix', 'prefix_ext', 'suffix_ext', 'repeatHMM', 'modHMM'])
 
     def __reverse_complement__(self, sequence):
         complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
@@ -486,24 +553,27 @@ class repeatCounter(object):
 
     def add_target(self, target_name, repeat, prefix, suffix):
         if not target_name in self.targets:
-            prefix_ext = prefix
-            prefix = prefix[-50:]
-            suffix_ext = suffix
-            suffix = suffix[:50]
+            prefix_ext = prefix.upper()
+            prefix = prefix[-50:].upper()
+            suffix_ext = suffix.upper()
+            suffix = suffix[:50].upper()
+            repeat = repeat.upper()
             # template model
             tc_plus = self.target_classifier(
                 self.pm.generate_signal(prefix, samples=self.samples),
                 self.pm.generate_signal(suffix, samples=self.samples),
                 self.pm.generate_signal(prefix_ext, samples=self.samples),
                 self.pm.generate_signal(suffix_ext, samples=self.samples),
-                flankedRepeatHMM(repeat, prefix, suffix, self.pm, self.HMM_config) )
+                flankedRepeatHMM(repeat, prefix, suffix, self.pm, self.HMM_config),
+                repeatModHMM(repeat, self.pm, self.pm_mod, config=self.HMM_config))
             # complement model
             tc_minus = self.target_classifier(
                 self.pm.generate_signal(self.__reverse_complement__(suffix), samples=self.samples),
                 self.pm.generate_signal(self.__reverse_complement__(prefix), samples=self.samples),
                 self.pm.generate_signal(self.__reverse_complement__(suffix_ext), samples=self.samples),
                 self.pm.generate_signal(self.__reverse_complement__(prefix_ext), samples=self.samples),
-                flankedRepeatHMM(self.__reverse_complement__(repeat), self.__reverse_complement__(suffix), self.__reverse_complement__(prefix), self.pm, self.HMM_config))
+                flankedRepeatHMM(self.__reverse_complement__(repeat), self.__reverse_complement__(suffix), self.__reverse_complement__(prefix), self.pm, self.HMM_config),
+                repeatModHMM(self.__reverse_complement__(repeat), self.pm, self.pm_mod, config=self.HMM_config))
             self.targets[target_name] = (tc_plus, tc_minus)
             logger.log("RepeatCounter: Added target {}".format(target_name), logger.log_type.Info)
         else:
@@ -519,29 +589,32 @@ class repeatCounter(object):
             else:
                 raise ValueError("RepeatCounter: Strand must be + or -.")
             flt_signal = sp.medfilt(raw_signal, kernel_size=3)
-            nrm_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
-            nrm_signal = np.clip(nrm_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(nrm_signal)))
+            morph_signal = (flt_signal - np.median(flt_signal)) / self.pm.MAD(flt_signal)
+            morph_signal = np.clip(morph_signal * 24 + 127, 0, 255).astype(np.dtype('uint8')).reshape((1, len(morph_signal)))
             flt = rectangle(1, 8)
-            nrm_signal = opening(nrm_signal, flt)
-            nrm_signal = closing(nrm_signal, flt)[0].astype(np.dtype('float'))
-            nrm_signal = self.pm.normalize2model(nrm_signal.astype(np.dtype('float')), mode='minmax')
+            morph_signal = opening(morph_signal, flt)
+            morph_signal = closing(morph_signal, flt)[0].astype(np.dtype('float'))
+            morph_signal = self.pm.normalize2model(morph_signal.astype(np.dtype('float')), mode='minmax')
             flt_signal = self.pm.normalize2model(flt_signal.astype(np.dtype('float')), mode='minmax')
             trim_prefix = len(tc.prefix_ext) - len(tc.prefix)
             trim_suffix = len(tc.suffix_ext) - len(tc.suffix)
-            score_prefix, prefix_begin, prefix_end = self.__detect_range__(nrm_signal, tc.prefix_ext, pre_trim=trim_prefix)
-            score_suffix, suffix_begin, suffix_end = self.__detect_range__(nrm_signal, tc.suffix_ext, post_trim=trim_suffix)
-            n = 0; p = 0; path = np.array([])
+            score_prefix, prefix_begin, prefix_end = self.__detect_range__(morph_signal, tc.prefix_ext, pre_trim=trim_prefix)
+            score_suffix, suffix_begin, suffix_end = self.__detect_range__(morph_signal, tc.suffix_ext, post_trim=trim_suffix)
+            n = 0; p = 0; states = []; mod_pattern = '-'
             if prefix_begin < suffix_end and score_prefix > 0.0 and score_suffix > 0.0:
-                n, p, path = self.__detect_short__(tc.repeatHMM, flt_signal[prefix_begin:suffix_end])
-            # f, ax = plt.subplots(2, sharex=True)
-            # ax[0].plot(flt_signal, 'k-')
-            # ax[0].axvline(prefix_begin, color='red')
-            # ax[0].axvline(prefix_end, color='red')
-            # ax[0].axvline(suffix_begin, color='lime')
-            # ax[0].axvline(suffix_end, color='lime')
-            # ax[1].plot(np.arange(prefix_begin, suffix_end), path, 'b-')
-            # plt.show()
-            return n, score_prefix, score_suffix, p, prefix_end, suffix_begin - prefix_end
+                n, p, states = self.__detect_short__(tc.repeatHMM, flt_signal[prefix_begin:suffix_end])
+                if self.pm != self.pm_mod:
+                    #rep_signal = flt_signal[prefix_begin:suffix_end][np.array([True if 'repeat' in x else False for x in states])]
+                    nrm_signal = self.pm.normalize2model(raw_signal.astype(np.dtype('float')), mode='minmax')
+                    rep_signal = nrm_signal[prefix_begin:suffix_end][np.array([True if 'repeat' in x else False for x in states])]
+                    mod_pattern = tc.modHMM.mod_repeats(rep_signal)
+                    # import matplotlib.pyplot as plt
+                    # f, ax = plt.subplots(2, sharex=True)
+                    # ax[0].plot(raw_signal[prefix_begin:suffix_end][np.array([True if 'repeat' in x else False for x in states])], 'k-')
+                    # ax[1].plot(rep_signal, 'k-')
+                    # ax[0].set_title('Count {count}, strand {strand}'.format(count=n, strand=strand))
+                    # plt.show()
+            return n, score_prefix, score_suffix, p, prefix_end, max(suffix_begin - prefix_end, 0), mod_pattern
         else:
             raise ValueError("RepeatCounter: Target with name " + str(target_name) + " not defined.")
 
@@ -560,8 +633,8 @@ class repeatDetector(object):
             self.CLIP_BEGIN = 0
             self.CLIP_END = 0
 
-    def __init__(self, repeat_config, model_file, fast5_index_file, align_config=None, HMM_config=None):
-        self.repeatCounter = repeatCounter(model_file, align_config, HMM_config)
+    def __init__(self, repeat_config, model_file, fast5_index_file, mod_model_file=None, align_config=None, HMM_config=None):
+        self.repeatCounter = repeatCounter(model_file, mod_model_file=mod_model_file, align_config=align_config, HMM_config=HMM_config)
         self.repeatLoci = defaultdict(lambda : [])
         self.repeat_config = repeat_config
         self.is_init = False
@@ -609,25 +682,28 @@ class repeatDetector(object):
     def detect(self, sam_line=''):
         if not self.is_init:
             self.__init_hmm__()
-        sam_record = self.__decode_sam__(sam_line)
-        f5_record = self.f5.raw(sam_record.QNAME)
         target_counts = []
-        if sam_record.QNAME and f5_record is not None:
-            if sam_record.FLAG & 0x10 == 0:
-                strand = '+'
-            else:
-                strand = '-'
-            target_names = self.__intersect_target__(sam_record)
-            logger.log("Detector: Test {id} for targets: {targets}.".format(id=sam_record.QNAME, targets=','.join(target_names)), logger.log_type.Debug)
-            for target_name in target_names:
-                repeat_count = self.repeatCounter.detect(target_name, f5_record, strand)
-                target_counts.append((sam_record.QNAME, target_name, strand, *repeat_count))
-            return {'target_counts': target_counts}
-        elif f5_record is None:
-            logger.log("Detector: No fast5 for ID {id}".format(id=sam_record.QNAME), logger.log_type.Warning)
-        else:
+        sam_record = self.__decode_sam__(sam_line)
+        if not sam_record.QNAME:
             logger.log("Detector: Error parsing alignment \n{}".format(sam_line), logger.log_type.Error)
-            
+            return None
+        if sam_record.FLAG & 0x10 == 0:
+            strand = '+'
+        else:
+            strand = '-'
+        target_names = self.__intersect_target__(sam_record)
+        if not target_names:
+            logger.log("Detector: No target for {}".format(sam_record.QNAME), logger.log_type.Debug)
+            return None
+        f5_record = self.f5.get_raw(sam_record.QNAME)
+        if f5_record is None:
+            logger.log("Detector: No fast5 for ID {id}".format(id=sam_record.QNAME), logger.log_type.Warning)
+            return None
+        logger.log("Detector: Test {id} for targets: {targets}.".format(id=sam_record.QNAME, targets=','.join(target_names)), logger.log_type.Debug)
+        for target_name in target_names:
+            repeat_count = self.repeatCounter.detect(target_name, f5_record, strand)
+            target_counts.append((sam_record.QNAME, target_name, strand, *repeat_count))
+        return {'target_counts': target_counts}
 
 
 
@@ -638,9 +714,9 @@ class outputWriter(object):
         self.output_file = output_file
         if self.output_file:
             with open(self.output_file, 'w') as fp:
-                print('\t'.join(['ID', 'target', 'strand', 'count', 'score_prefix', 'score_suffix', 'log_p', 'offset', 'ticks']), file=fp)
+                print('\t'.join(['ID', 'target', 'strand', 'count', 'score_prefix', 'score_suffix', 'log_p', 'offset', 'ticks', 'mod']), file=fp)
         else:
-            print('\t'.join(['ID', 'target', 'strand', 'count', 'score_prefix', 'score_suffix', 'log_p', 'offset', 'ticks']))
+            print('\t'.join(['ID', 'target', 'strand', 'count', 'score_prefix', 'score_suffix', 'log_p', 'offset', 'ticks', 'mod']))
 
     def write_line(self, target_counts=[]):
         if self.output_file:
@@ -803,7 +879,7 @@ class main():
         usage='''STRique.py <command> [<args>]
 Available commands are:
    index      Index batch(es) of bulk-fast5 or tar archived single fast5
-   count      Extract single reads from indexed sequencing run
+   count      Count single read repeat expansions
 ''')
         parser.add_argument('command', help='Subcommand to run')
         args = parser.parse_args(sys.argv[1:2])
@@ -827,10 +903,11 @@ Available commands are:
         # command line
         parser = argparse.ArgumentParser(description="STR Detection in raw nanopore data")
         parser.add_argument("f5Index", help="Fast5 index")
-        parser.add_argument("model", help="pore model")
-        parser.add_argument("repeat", help="repeat region config file")
-        parser.add_argument("--out", default=None, help="output file name, if not given print to stdout")
-        parser.add_argument("--algn", default=None, help="alignment in sam format, if not given read from stdin")
+        parser.add_argument("model", help="Pore model")
+        parser.add_argument("repeat", help="Repeat region config file")
+        parser.add_argument("--out", default=None, help="Output file name, if not given print to stdout")
+        parser.add_argument("--algn", default=None, help="Alignment in sam format, if not given read from stdin")
+        parser.add_argument("--mod_model", default=None, help="Base modification pore model")
         parser.add_argument("--config", help="Config file with HMM transition probabilities")
         parser.add_argument("--t", type=int, default=1, help="Number of processes to use in parallel")
         parser.add_argument("--log_level", default='warning', choices=['error', 'warning', 'info', 'debug'], help="Detailed output")
@@ -841,10 +918,17 @@ Available commands are:
         logger.log("Main: Parsed config.", logger.log_type.Debug)
         # index/load reads
         if not os.path.isfile(args.f5Index):
-            logger.log("Main: Fast5 index file does not exist.", log_type.Error)
-            exit(-1)
+            logger.log("Main: Fast5 index file does not exist.", logger.log_type.Error)
+            exit(1)
+        # model files
+        if not os.path.isfile(args.model):
+            logger.log("Main: Pore model file does not exist.", logger.log_type.Error)
+            exit(1)
+        if args.mod_model and not os.path.isfile(args.mod_model):
+            logger.log("Main: Modification pore model file does not exist.", logger.log_type.Error)
+            exit(1)
         # repeat detector
-        rd = repeatDetector(config['repeat'], args.model, args.f5Index, align_config=config['align'], HMM_config=config['HMM'])
+        rd = repeatDetector(config['repeat'], args.model, args.f5Index, mod_model_file=args.mod_model, align_config=config['align'], HMM_config=config['HMM'])
         ow = outputWriter(args.out)
         # run repeat detection
         sam_queue = Queue(100)
