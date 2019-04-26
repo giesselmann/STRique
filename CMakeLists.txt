@@ -32,7 +32,7 @@
 # Written by Pay Giesselmann
 # -----------------------------------------------------------------------
 cmake_minimum_required(VERSION 3.2.2)
-project(pyseqan VERSION 0.2.1 LANGUAGES CXX)
+project(pyseqan VERSION 0.3.0 LANGUAGES CXX)
 
 # global settings
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
