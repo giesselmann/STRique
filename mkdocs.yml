@@ -1,0 +1,91 @@
+# \DOCS\-------------------------------------------------------------------------
+#
+#  CONTENTS      : MkDocs
+#
+#  DESCRIPTION   : none
+#
+#  RESTRICTIONS  : none
+#
+#  REQUIRES      : none
+#
+# ---------------------------------------------------------------------------------
+# Copyright (c) 2018-2019, Pay Giesselmann, Max Planck Institute for Molecular Genetics
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+#
+# Written by Pay Giesselmann
+# ---------------------------------------------------------------------------------
+site_name: STRique Documentation
+site_description: 'Repeat expansion and methylation state analysis with nanopore sequencing'
+site_author: 'Pay Giesselmann'
+site_url: 'https://STRique.readthedocs.io'
+copyright: 'Copyright &copy; 2018 - 2019 Pay Giesselmann, Max Planck Institute for Molecular Genetics'
+
+repo_name: 'giesselmann/STRique'
+repo_url: 'https://github.com/giesselmann/STRique/'
+
+docs_dir: docs
+
+theme:
+  name: 'material'
+  include_search_page: false
+  search_index_only: true
+  logo:
+    icon: 'apps'
+  static_templates:
+    - 404.html
+
+# Extensions
+markdown_extensions:
+  - markdown.extensions.admonition
+  - markdown.extensions.codehilite:
+      guess_lang: false
+  - markdown.extensions.def_list
+  - markdown.extensions.footnotes
+  - markdown.extensions.meta
+  - markdown.extensions.toc:
+      permalink: true
+  - pymdownx.arithmatex
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.critic
+  - pymdownx.details
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Page tree
+nav:
+  - Introduction: index.md
+  - Installation:
+    - Prerequisites: installation/prerequisites.md
+    - Source: installation/src.md
+    - Docker: installation/docker.md
+    - Tests: installation/test.md
+  - Usage: examples/intro.md
+  - Release notes: release-notes.md
+  - Citation: citation.md
+  - License: license.md
