@@ -20,7 +20,7 @@ These packages are likely present in most production environments. Please also r
 
 **C++**
 
-    g++ > 5 (C++14 support)
+    g++ >= 6 (C++14 support)
     cmake
     SeqAn2
     Pybind11
