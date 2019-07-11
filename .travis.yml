@@ -25,6 +25,7 @@ matrix:
       - BUILD_TYPE='Release'
       - COVERAGE=OFF
       - PYTHON=3.5
+      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
   - name : "Python 3.6 Xenial"
     os: linux
     language: python
@@ -45,6 +46,7 @@ matrix:
       - BUILD_TYPE='Release'
       - COVERAGE=OFF
       - PYTHON=3.6
+      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
   - name : "Python 3.7 Xenial"
     os: linux
     language: python
@@ -65,18 +67,22 @@ matrix:
       - BUILD_TYPE='Release'
       - COVERAGE=OFF
       - PYTHON=3.7
+      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
   - name : "Python 3.5 macOS"
     os: osx
     osx_image: xcode10.2
+    env:
+        - MATRIX_EVAL="brew install gcc6 && CC=gcc-6 && CXX=g++-6"
     language: shell
 
 
 notifications:
   email: false
 
+before_install:
+  - eval "${MATRIX_EVAL}"
+
 install:
-  - export CC=/usr/bin/gcc-6
-  - export CXX=/usr/bin/g++-6
   - pip3 install --upgrade pip
   - pip3 install -r requirements.txt
   - alias python=python3
