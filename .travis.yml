@@ -73,6 +73,8 @@ matrix:
     osx_image: xcode10.2
     env:
         - MATRIX_EVAL="brew install gcc6 && CC=gcc-6 && CXX=g++-6"
+        - CXX_COMPILER='g++-6'
+        - C_COMPILER='gcc-6'
     language: shell
 
 
