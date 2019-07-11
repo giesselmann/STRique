@@ -4,9 +4,7 @@
 [![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/giesselmann/strique.svg)](https://hub.docker.com/r/giesselmann/strique/)
 [![Documentation Status](https://readthedocs.org/projects/strique/badge/?version=latest)](https://strique.readthedocs.io/en/latest/?badge=latest)
 
-***
-
-<img style="float: right;" src="docs/images/workflow.png" width="30%" hspace="20">
+<img align="right" src="docs/images/workflow.png" width="30%" hspace="20">
 
 STRique is a python package to analyze repeat expansion and methylation states of short tandem repeats (STR) in Oxford Nanopore Technology (ONT) long read sequencing data.
 
