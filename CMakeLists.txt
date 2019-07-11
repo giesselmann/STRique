@@ -38,6 +38,8 @@ project(pyseqan VERSION 0.3.0 LANGUAGES CXX)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Shared Lib" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "Build position independent code" FORCE)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 include(ExternalProject)
 
 # check openmp
@@ -47,7 +49,7 @@ if (OPENMP_FOUND)
     set (CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenMP_CXX_FLAGS}")
     set (CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
 endif()
-             
+
 # set up SeqAn environment
 set(CMAKE_PREFIX_PATH "${CMAKE_SOURCE_DIR}/submodules/seqan/util/cmake")
 set(SEQAN_INCLUDE_PATH "${CMAKE_SOURCE_DIR}/submodules/seqan/include")
@@ -81,4 +83,3 @@ add_subdirectory("${CMAKE_SOURCE_DIR}/src")
 message(STATUS "SeqAn has openmp: " ${SEQAN_HAS_OPENMP})
 message(STATUS "ZLIB library: " ${ZLIB_STATIC_LIBRARY})
 message(STATUS "Position independent code: " ${POSITION_INDEPENDENT_CODE})
-

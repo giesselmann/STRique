@@ -75,6 +75,10 @@ matrix:
         - MATRIX_EVAL="brew install gcc6 && CC=gcc-6 && CXX=g++-6"
         - CXX_COMPILER='g++-6'
         - C_COMPILER='gcc-6'
+        - Fortran_COMPILER='gfortran-6'
+        - BUILD_TYPE='Release'
+        - COVERAGE=OFF
+        - PYTHON=3.7
     language: shell
 
 
