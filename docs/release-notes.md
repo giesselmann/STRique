@@ -4,6 +4,7 @@
 Development release:
 
 :   * Documentation and examples in readthedocs
+    * Reduce docker image size
 
 #### v0.3.0 - 2019-04-26
 Development release:
