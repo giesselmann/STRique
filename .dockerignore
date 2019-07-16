@@ -1,0 +1,6 @@
+# exclude from build context
+.git
+*.egg-info
+**/__pycache__
+test/*/
+site/
