@@ -5,7 +5,8 @@ sudo: true
 matrix:
   include:
   # Linux builds
-  - os: linux
+  - name: "Python 3.5 Xenial"
+    os: linux
     language: python
     python: "3.5"
     compiler: gcc
@@ -24,7 +25,9 @@ matrix:
       - BUILD_TYPE='Release'
       - COVERAGE=OFF
       - PYTHON=3.5
-  - os: linux
+      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+  - name : "Python 3.6 Xenial"
+    os: linux
     language: python
     python: "3.6"
     compiler: gcc
@@ -43,7 +46,9 @@ matrix:
       - BUILD_TYPE='Release'
       - COVERAGE=OFF
       - PYTHON=3.6
-  - os: linux
+      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+  - name : "Python 3.7 Xenial"
+    os: linux
     language: python
     dist: xenial
     python: "3.7"
@@ -62,18 +67,35 @@ matrix:
       - BUILD_TYPE='Release'
       - COVERAGE=OFF
       - PYTHON=3.7
+      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
+  - name : "Python 3.5 macOS"
+    os: osx
+    osx_image: xcode10.2
+    env:
+        - MATRIX_EVAL="brew install gcc6 && CC=gcc-6 && CXX=g++-6"
+        - CXX_COMPILER='g++-6'
+        - C_COMPILER='gcc-6'
+        - Fortran_COMPILER='gfortran-6'
+        - BUILD_TYPE='Release'
+        - COVERAGE=OFF
+        - PYTHON=3.7
+    language: shell
+
 
 notifications:
   email: false
 
+before_install:
+  - eval "${MATRIX_EVAL}"
+
 install:
-  - export CC=/usr/bin/gcc-6
-  - export CXX=/usr/bin/g++-6
-  - python --version
-  - pip install -r requirements.txt
-  - python setup.py install
-    
-script: 
-  - python scripts/STRique_test.py 
-  - python scripts/STRique.py index data/ > data/reads.fofn
+  - export CC=gcc-6
+  - export CXX=g++-6
+  - pip3 install --upgrade pip
+  - pip3 install -r requirements.txt
+  - python3 setup.py install
+
+script:
+  - python3 scripts/STRique_test.py
+  - python3 scripts/STRique.py index data/ > data/reads.fofn
   - cat data/c9orf72.sam | python3 scripts/STRique.py count data/reads.fofn models/r9_4_450bps.model configs/repeat_config.tsv --config configs/STRique.json --mod_model models/r9_4_450bps_mCpG.model --log_level debug

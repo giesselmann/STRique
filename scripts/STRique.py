@@ -841,7 +841,7 @@ def parse_config(repeat_config_file, param_config_file=None):
     with open(repeat_config_file, 'r') as fp:
         header = next(fp)
         for line in fp:
-            cols = line.rstrip().split('\t')
+            cols = line.rstrip().split()
             if len(cols) == 7:
                 repeats[cols[3]] = (cols[0], int(cols[1]), int(cols[2]), cols[4], cols[5], cols[6])
             else:
