@@ -17,3 +17,9 @@ Inside of the container type
     ls -l /host
 
 to see the files of the host system from where the container was started. Leave a running container with *exit*.
+
+You may want to test the container on the included example data. After starting the container with
+
+    docker run -it giesselmann/strique:v0.3.0
+
+you can use the commands listed under [test](test.md) except that you don't need to change the directory anymore.
