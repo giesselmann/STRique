@@ -89,3 +89,9 @@ configs/repeat_config.tsv > /host/my_data.hg19.strique.tsv
 ```
 
 Please note that changes made to the Docker filesystem are not persistent and will be lost after exiting the container. Make sure to write the output to a file on the host.
+
+## Output
+
+The output of STRique is a tsv file with repeat counts per read covering at least one region specified in the repeat config file. Reads are reported as soon as they overlap one of the regions, even if the repeat detection was not successful or not reliable. It is therefore suggested to filter the raw output.
+
+In a first step reads with zero repeat count can be discarded, this happens for instance, if prefix and suffix sequence are found in the wrong order in the raw signal. Secondly it is reasonable to further filter for the signal alignment scores **score_prefix** and **score_suffix**. These are indicators for the quality of the prefix and suffix mappings and have strong impact on the subsequent repeat counting. For the c9orf72 and FMR1 samples tested in our publication, a threshold of 4.0 was chosen. This value might change for other targets and configurations and is in general a tradeoff between number of evaluated repeats and their quality.
