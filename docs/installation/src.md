@@ -3,8 +3,10 @@
 STRique can be installed without root privileges as it's maintaining its dependencies by building required libraries from source in a user accessible path. Currently the following list of system wide packages is required to build STRique (names on macOS might be different):
 
 * git wget
-* gcc g++ make cmake
+* gcc-6 g++-6 (C++14 support)
+* make cmake
 * python3-dev
+* zlib1g-dev, libbz2-dev
 
 These packages are likely present in most production environments. Please also refer to the Dockerfile of the package repository for minimal system requirements.
 
@@ -14,14 +16,13 @@ These packages are likely present in most production environments. Please also r
 ## Dependencies
 **Python 3.5 or higher**
 
+    wheel cython
     pomegranate
     numpy, scipy, scikit-image
     h5py
 
 **C++**
 
-    g++ >= 6 (C++14 support)
-    cmake
     SeqAn2
     Pybind11
 
@@ -29,7 +30,13 @@ Dependencies get downloaded and build by the setup script.
 
 ## Installation
 
-Please consider to install STRique into a separate virtual environment to avoid conflicting dependencies with other packages.
+Please consider to install STRique into a separate virtual environment to avoid conflicting dependencies with other packages or if you don't have root access.
+Update pip and install virtual environment:
+
+```
+python3 -m pip install --user --upgrade pip
+python3 -m pip install --user virtualenv
+```
 
 Create a virtual python environment:
 
