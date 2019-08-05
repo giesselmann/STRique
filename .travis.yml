@@ -8,6 +8,7 @@ matrix:
   - name: "Python 3.5 Xenial"
     os: linux
     language: python
+    dist: xenial
     python: "3.5"
     compiler: gcc
     addons: &gcc6
@@ -29,6 +30,7 @@ matrix:
   - name : "Python 3.6 Xenial"
     os: linux
     language: python
+    dist: xenial
     python: "3.6"
     compiler: gcc
     addons: &gcc6
