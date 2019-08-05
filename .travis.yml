@@ -16,7 +16,6 @@ matrix:
         sources:
           - ubuntu-toolchain-r-test
         packages:
-          - cmake3
           - g++-6
           - gcc-6
     env:
@@ -38,7 +37,6 @@ matrix:
         sources:
           - ubuntu-toolchain-r-test
         packages:
-          - cmake3
           - g++-6
           - gcc-6
     env:
