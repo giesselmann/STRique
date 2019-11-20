@@ -13,3 +13,9 @@ Please refer to the **[documentation](https://strique.readthedocs.io/en/latest/)
 To get started the **[installation](https://strique.readthedocs.io/en/latest/installation/prerequisites/)** chapter describes the available installation options depending on the operation system and already existing environments.
 
 In the **[Usage](https://strique.readthedocs.io/en/latest/examples/intro/)** chapter the stepwise analysis of nanopore reads covering repeat expansions is demonstrated.
+
+## Citation
+
+If you use STRique in your work please cite:
+
+> Giesselmann, P., Brändl, B., Raimondeau, E. et al. Analysis of short tandem repeat expansions and their methylation state with nanopore sequencing. Nat Biotechnol (2019) doi:10.1038/s41587-019-0293-x
