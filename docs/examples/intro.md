@@ -92,6 +92,19 @@ Please note that changes made to the Docker filesystem are not persistent and wi
 
 ## Output
 
-The output of STRique is a tsv file with repeat counts per read covering at least one region specified in the repeat config file. Reads are reported as soon as they overlap one of the regions, even if the repeat detection was not successful or not reliable. It is therefore suggested to filter the raw output.
+The output of STRique is a tsv file with repeat counts per read covering at least one region specified in the repeat config file. Reads are reported as soon as they overlap one of the regions, even if the repeat detection was not successful or not reliable. It is therefore suggested to filter the raw output. The columns of the output stream are as follows:
+
+
+  * ID: The read identifier from MinKNOW
+  * target: The repeat expansion target specified in the config file
+  * strand: + or -
+  * count: Repeat count as number of occurrences of the configured repeat sequence
+  * score_prefix and score_suffix: Signal alignment scores for post processing
+  * log_p: HMM log-likelihood over the repeat, generally larger for longer repeats
+  * offset, ticks: Offset and length of the repeat in the raw signal fast5 file, for debugging and visualization
+  * mod: Base modification string if --mod_model was provided e.g. '0001000' for a mostly unmethylated repeat
+
 
 In a first step reads with zero repeat count can be discarded, this happens for instance, if prefix and suffix sequence are found in the wrong order in the raw signal. Secondly it is reasonable to further filter for the signal alignment scores **score_prefix** and **score_suffix**. These are indicators for the quality of the prefix and suffix mappings and have strong impact on the subsequent repeat counting. For the c9orf72 and FMR1 samples tested in our publication, a threshold of 4.0 was chosen. This value might change for other targets and configurations and is in general a tradeoff between number of evaluated repeats and their quality.
+
+The base modification string contains one character per repeat instance with zeros for the base model and ones for the modification model to be more likely. Since the HMM for repeat base modifications is slightly different, the length of the string is not always exactly equal to the reported repeat count. It is recommended to further compute a per read mean repeat methylation.
