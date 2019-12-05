@@ -1,5 +1,10 @@
 # Release notes
 
+#### v0.4.1 - 2019-12-05
+Development release:
+
+:   * Plot command for signal traces of STRs
+
 #### v0.4.0 - 2019-07-09
 Development release:
 
