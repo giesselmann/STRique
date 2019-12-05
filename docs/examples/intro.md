@@ -53,7 +53,7 @@ STRique will only consider aligned reads where the mapping including soft-clippi
 The repeat detection requires an indexed raw data archive and the alignment of the reads:
 
 ```
-python3 scripts/STRique.py count [OPTIONS] f5 model repeat
+python3 scripts/STRique.py count [OPTIONS] f5Index model repeat
 
 positional arguments:
   f5Index          Fast5 index
@@ -66,7 +66,7 @@ optional arguments:
   --mod_model MOD_MODEL   Base modification pore model
   --config CONFIG         Config file with HMM transition probabilities
   --t T                   Number of processes to use in parallel
-  --log_level             Detailed output {error,warning,info,debug}
+  --log_level             Log level {error,warning,info,debug}
 ```
 
 The command to detect repeat lengths could look similar to:
@@ -108,3 +108,32 @@ The output of STRique is a tsv file with repeat counts per read covering at leas
 In a first step reads with zero repeat count can be discarded, this happens for instance, if prefix and suffix sequence are found in the wrong order in the raw signal. Secondly it is reasonable to further filter for the signal alignment scores **score_prefix** and **score_suffix**. These are indicators for the quality of the prefix and suffix mappings and have strong impact on the subsequent repeat counting. For the c9orf72 and FMR1 samples tested in our publication, a threshold of 4.0 was chosen. This value might change for other targets and configurations and is in general a tradeoff between number of evaluated repeats and their quality.
 
 The base modification string contains one character per repeat instance with zeros for the base model and ones for the modification model to be more likely. Since the HMM for repeat base modifications is slightly different, the length of the string is not always exactly equal to the reported repeat count. It is recommended to further compute a per read mean repeat methylation.
+
+
+## Plot
+
+STRique comes with a basic visualization of the repetitive signal. After raw indexing and counting you can plot the raw nanopore traces of the repeat with the following command:
+
+```
+python3 scripts/STRique.py plot [OPTIONS] f5Index
+
+positional arguments:
+  f5Index                   Fast5 index
+
+optional arguments:
+  -h, --help                show this help message and exit
+  --counts COUNTS           Repeat count ouput from STRique, if not given read from stdin
+  --extension EXTENSION     Extension as fraction of repeat signal around STR region to plot
+  --zoom ZOOM               Region around prefix and suffix to plot
+  --log_level               Log level {error,warning,info,debug}
+```
+
+For example:
+
+```
+cat ~/my_data.hg19.strique.tsv | python3 ~/src/STRique/scripts/STRique.py plot ~/my_data/reads.fofn
+```
+
+You can either read the STRique count from stdin or specify it with the --counts flag. The output for the provided example data looks like this:
+
+<img src="../../images/signal_plot.png"width="100%" hspace="20">

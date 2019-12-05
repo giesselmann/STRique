@@ -41,7 +41,6 @@ import numpy as np
 import numpy.ma as ma
 import scipy.signal as sp
 import pomegranate as pg
-#import matplotlib.pyplot as plt
 from signal import signal, SIGPIPE, SIG_DFL
 from collections import namedtuple, defaultdict
 from skimage.morphology import opening, closing, dilation, erosion, rectangle
@@ -880,6 +879,7 @@ class main():
 Available commands are:
    index      Index batch(es) of bulk-fast5 or tar archived single fast5
    count      Count single read repeat expansions
+   plot       Plot repeat signal after counting
 ''')
         parser.add_argument('command', help='Subcommand to run')
         args = parser.parse_args(sys.argv[1:2])
@@ -910,7 +910,7 @@ Available commands are:
         parser.add_argument("--mod_model", default=None, help="Base modification pore model")
         parser.add_argument("--config", help="Config file with HMM transition probabilities")
         parser.add_argument("--t", type=int, default=1, help="Number of processes to use in parallel")
-        parser.add_argument("--log_level", default='warning', choices=['error', 'warning', 'info', 'debug'], help="Detailed output")
+        parser.add_argument("--log_level", default='warning', choices=['error', 'warning', 'info', 'debug'], help="Log level")
         args = parser.parse_args(argv)
         logger.init(log_level=args.log_level)
         # load config
@@ -945,7 +945,70 @@ Available commands are:
         mt.close()
         logger.close()
 
-
+    def plot(self, argv):
+        parser = argparse.ArgumentParser(description="Signal plots over STR expansions")
+        parser.add_argument("f5Index", help="Fast5 index")
+        parser.add_argument("--counts", default=None, help="Repeat count output from STRique, if not given read from stdin")
+        parser.add_argument("--extension", type=float, default=0.1, help="Extension as fraction of repeat signal around STR region to plot")
+        parser.add_argument("--zoom", type=int, default=500, help="Region around prefix and suffix to plot")
+        parser.add_argument("--log_level", default='warning', choices=['error', 'warning', 'info', 'debug'], help="Log level")
+        args = parser.parse_args(argv)
+        logger.init(log_level=args.log_level)
+        # index/load reads
+        import matplotlib.pyplot as plt
+        if not os.path.isfile(args.f5Index):
+            logger.log("Main: Fast5 index file does not exist.", logger.log_type.Error)
+            exit(1)
+        f5Index = fast5Index.fast5Index(args.f5Index)
+        def tsv_iter(input):
+            if input:
+                with open(input, 'r') as fp:
+                    for line in fp:
+                        if not line.startswith('ID'):
+                            yield line.strip().split('\t')
+            else:
+                for line in sys.stdin:
+                    if not line.startswith('ID'):
+                        yield line.strip().split('\t')
+        for record in tsv_iter(args.counts):
+            ID, target, strand, count, score_prefix, score_suffix, _, offset, ticks = record[:9]
+            offset = int(offset)
+            ticks = int(ticks)
+            score_prefix = float(score_prefix)
+            score_suffix = float(score_suffix)
+            raw_signal = f5Index.get_raw(ID)
+            if raw_signal is not None:
+                flt_signal = sp.medfilt(raw_signal, kernel_size=3)
+                flt_signal = (flt_signal - np.median(flt_signal)) / np.std(flt_signal)
+                prefix_extend = max(0, offset - int(ticks * args.extension))
+                suffix_extend = min(len(flt_signal), offset + ticks + int(ticks * args.extension))
+                prefix_begin = max(offset - args.zoom, 0)
+                prefix_end = prefix_begin + args.zoom * 2
+                suffix_begin = offset + ticks - args.zoom
+                suffix_end = min(len(flt_signal), suffix_begin + args.zoom * 2)
+                plt.subplot(2,1,1)
+                plt.plot(flt_signal[prefix_extend:suffix_extend], 'k-', linewidth=0.5, label='genome')
+                plt.plot(np.arange(ticks) + (offset - prefix_extend), flt_signal[offset:offset+ticks], 'b-', linewidth=1.0, label='STR')
+                plt.legend()
+                plt.title("Read {} with {} repeats".format(ID, count))
+                plt.subplot(2,2,3)
+                plt.plot(flt_signal[prefix_begin:prefix_end], 'k-', label='prefix')
+                plt.plot(np.arange(args.zoom, 2 * args.zoom), flt_signal[prefix_begin + args.zoom:prefix_end], 'b-')
+                plt.axvline(args.zoom, color='red', label='STR begin')
+                plt.legend()
+                plt.title("Prefix region with score {:.2f}".format(score_prefix))
+                plt.subplot(2,2,4)
+                plt.plot(flt_signal[suffix_begin:suffix_end], 'k-', label='suffix')
+                plt.plot(flt_signal[suffix_begin:suffix_end - args.zoom], 'b-')
+                plt.axvline(args.zoom, color='red', label='STR end')
+                plt.legend()
+                plt.title("Suffix region with score {:.2f}".format(score_suffix))
+                plt.tight_layout()
+                plt.show()
+            else:
+                logger.log("Plot: No fast5 for ID {id}".format(id=sam_record.QNAME), logger.log_type.Warning)
+        logger.close()
+        exit(0)
 
 
 # main
