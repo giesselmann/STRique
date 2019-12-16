@@ -1,5 +1,10 @@
 # Release notes
 
+#### v0.4.2 - 2019-12-16
+Development release:
+
+:   * Plot either to GUI or file
+
 #### v0.4.1 - 2019-12-05
 Development release:
 

@@ -140,7 +140,7 @@ For example:
 cat ~/my_data.hg19.strique.tsv | python3 ~/src/STRique/scripts/STRique.py plot ~/my_data/reads.fofn
 ```
 
-You can either read the STRique count from stdin or specify it with the --counts flag. The output for the provided example data looks like this:
+You can either read the STRique counts from stdin or specify a file with the --counts flag. The plots get displayed in a matplotlib GUI. Alternatively you can specify --output to write each plot to a separate file. The filename is ```target_count_ID.format```. The output for the provided example data looks like this:
 
 <img src="../../images/signal_plot.png"width="100%" hspace="20">
 
