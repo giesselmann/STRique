@@ -122,10 +122,16 @@ positional arguments:
 
 optional arguments:
   -h, --help                show this help message and exit
-  --counts COUNTS           Repeat count ouput from STRique, if not given read from stdin
+  --counts COUNTS           Repeat count output from STRique, if not given read from stdin
+  --output OUTPUT           Output directory for plots, use instead of interactive GUI
+  --format                  Output format when writing to files {pdf,svg,png}, default=png
+  --width WIDTH             Plot width, default=16
+  --height HEIGHT           Plot height, default=9
+  --dpi DPI                 Resolution of plot, default=80
   --extension EXTENSION     Extension as fraction of repeat signal around STR region to plot
   --zoom ZOOM               Region around prefix and suffix to plot
   --log_level               Log level {error,warning,info,debug}
+
 ```
 
 For example:
@@ -137,3 +143,8 @@ cat ~/my_data.hg19.strique.tsv | python3 ~/src/STRique/scripts/STRique.py plot ~
 You can either read the STRique count from stdin or specify it with the --counts flag. The output for the provided example data looks like this:
 
 <img src="../../images/signal_plot.png"width="100%" hspace="20">
+
+!!! warning "Docker"
+    The plot commands tries to open an interactive GUI per default. If you use STRique from within a Docker container please
+    specify the --output argument to write the plots to disk. From within the container it is non-trivial to forward graphical output
+    to the host.

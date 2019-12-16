@@ -949,6 +949,11 @@ Available commands are:
         parser = argparse.ArgumentParser(description="Signal plots over STR expansions")
         parser.add_argument("f5Index", help="Fast5 index")
         parser.add_argument("--counts", default=None, help="Repeat count output from STRique, if not given read from stdin")
+        parser.add_argument("--output", default=None, help="Output directory for plots, use instead of interactive GUI")
+        parser.add_argument("--format", default='png', choices={"png", "pdf", "svg"}, help="Output format when writing to files")
+        parser.add_argument("--width", default=16, type=int, help="Plot width")
+        parser.add_argument("--height", default=9, type=int, help="Plot height")
+        parser.add_argument("--dpi", default=80, type=int, help="Resolution of plot")
         parser.add_argument("--extension", type=float, default=0.1, help="Extension as fraction of repeat signal around STR region to plot")
         parser.add_argument("--zoom", type=int, default=500, help="Region around prefix and suffix to plot")
         parser.add_argument("--log_level", default='warning', choices=['error', 'warning', 'info', 'debug'], help="Log level")
@@ -960,6 +965,9 @@ Available commands are:
             logger.log("Main: Fast5 index file does not exist.", logger.log_type.Error)
             exit(1)
         f5Index = fast5Index.fast5Index(args.f5Index)
+        # create output directory if needed
+        if args.output:
+            os.makedirs(args.output, exist_ok=True)
         def tsv_iter(input):
             if input:
                 with open(input, 'r') as fp:
@@ -986,6 +994,7 @@ Available commands are:
                 prefix_end = prefix_begin + args.zoom * 2
                 suffix_begin = offset + ticks - args.zoom
                 suffix_end = min(len(flt_signal), suffix_begin + args.zoom * 2)
+                plt.figure(num=None, figsize=(args.width, args.height), dpi=args.dpi, facecolor='w', edgecolor='k')
                 plt.subplot(2,1,1)
                 plt.plot(flt_signal[prefix_extend:suffix_extend], 'k-', linewidth=0.5, label='genome')
                 plt.plot(np.arange(ticks) + (offset - prefix_extend), flt_signal[offset:offset+ticks], 'b-', linewidth=1.0, label='STR')
@@ -1004,7 +1013,11 @@ Available commands are:
                 plt.legend()
                 plt.title("Suffix region with score {:.2f}".format(score_suffix))
                 plt.tight_layout()
-                plt.show()
+                if args.output:
+                    f_name = os.path.join(args.output, '_'.join([target, count, ID]) + '.' + args.format)
+                    plt.savefig(f_name, )
+                else:
+                    plt.show()
             else:
                 logger.log("Plot: No fast5 for ID {id}".format(id=sam_record.QNAME), logger.log_type.Warning)
         logger.close()
