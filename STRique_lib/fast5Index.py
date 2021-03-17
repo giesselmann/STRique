@@ -103,7 +103,7 @@ class fast5Index():
             if len(fofns) == 1 and len(fofns[0]) == 2:
                 # single read fast5
                 id, src_file = fofns[0]
-                shutil.copy(os.path.join(os.path.dirname(args.index), src_file), output)
+                shutil.copy(os.path.join(os.path.dirname(self.index_file), src_file), output)
             else:
                 _, batch_file, batch_ext, _ = fofns[0]
                 tarFiles = set([x[3] for x in fofns])
