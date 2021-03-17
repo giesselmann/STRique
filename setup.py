@@ -99,6 +99,6 @@ setup(
     packages=find_packages(),
     ext_modules=[CMakeExtension('STRique_lib.pyseqan')],
     cmdclass=dict(build_ext=CMakeBuild),
-    python_requires='>=3.5',
+    python_requires='>=3.6',
     zip_safe=False,
 )

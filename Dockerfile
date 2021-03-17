@@ -35,13 +35,13 @@
 # STRique Dockerfile
 
 # PACKAGE STAGE
-FROM ubuntu:16.04
+FROM ubuntu:18.04
 MAINTAINER Pay Giesselmann <giesselmann@molgen.mpg.de>
 
 ## packages
 RUN apt-get --yes update && \
     apt-get install -y --no-install-recommends wget locales \
-    git gcc g++ make cmake python3-dev \
+    git gcc g++ make cmake python3-dev python3-pip \
     ca-certificates apt-transport-https \
     && rm -rf /var/lib/apt/lists/*
 
@@ -55,8 +55,7 @@ RUN mkdir -p /app
 COPY . /app/
 WORKDIR /app
 
-RUN wget https://bootstrap.pypa.io/pip/3.5/get-pip.py
-RUN python3 get-pip.py
+RUN pip3 install setuptools wheel
 RUN pip3 install -r requirements.txt
 RUN python3 setup.py install
 RUN rm -rf build
