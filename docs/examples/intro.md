@@ -110,6 +110,34 @@ In a first step reads with zero repeat count can be discarded, this happens for 
 The base modification string contains one character per repeat instance with zeros for the base model and ones for the modification model to be more likely. Since the HMM for repeat base modifications is slightly different, the length of the string is not always exactly equal to the reported repeat count. It is recommended to further compute a per read mean repeat methylation.
 
 
+## Masking
+
+STRique detects the repeat expansion in the raw nanopore signal. It is possible to modify *.fast5* files and mask the repeat, in order to feed the data into conventional downstream pipelines. The command line of the masker-script is as follows:
+
+```
+python3 scripts/fast5Masker.py [OPTIONS] index counts output
+
+Mask region in raw nanopore fast5 file. Read stdin as tab-separated ID, ticks, offset
+
+positional arguments:
+  index                     Path to input fast5 index
+  counts                    Path to STRique count output file
+  output                    Path to output .fast5 directory with masked reads
+
+optional arguments:
+  -h, --help                show this help message and exit
+  --format {single,bulk}    Output fast5 format
+```
+
+For example:
+
+```
+python3 ~/src/STRique/scripts/fast5Masker.py ~/my_data/reads.fofn ~/my_data.hg19.strique.tsv ~/my_data_masked/
+```
+
+Output files can either be written as single- or bulk-fast5, depending on your needs.
+
+
 ## Plot
 
 STRique comes with a basic visualization of the repetitive signal. After raw indexing and counting you can plot the raw nanopore traces of the repeat with the following command:
