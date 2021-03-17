@@ -5,52 +5,31 @@ sudo: true
 matrix:
   include:
   # Linux builds
-  - name: "Python 3.5 Xenial"
+  - name : "Python 3.6 Bionic"
     os: linux
     language: python
-    dist: xenial
-    python: "3.5"
-    compiler: gcc
-    addons: &gcc6
-      apt:
-        sources:
-          - ubuntu-toolchain-r-test
-        packages:
-          - g++-6
-          - gcc-6
-    env:
-      - CXX_COMPILER='g++-6'
-      - C_COMPILER='gcc-6'
-      - Fortran_COMPILER='gfortran-6'
-      - BUILD_TYPE='Release'
-      - COVERAGE=OFF
-      - PYTHON=3.5
-      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
-  - name : "Python 3.6 Xenial"
-    os: linux
-    language: python
-    dist: xenial
+    dist: bionic
     python: "3.6"
     compiler: gcc
-    addons: &gcc6
+    addons: &gcc7
       apt:
         sources:
           - ubuntu-toolchain-r-test
         packages:
-          - g++-6
-          - gcc-6
+          - g++-7
+          - gcc-7
     env:
-      - CXX_COMPILER='g++-6'
-      - C_COMPILER='gcc-6'
-      - Fortran_COMPILER='gfortran-6'
+      - CXX_COMPILER='g++-7'
+      - C_COMPILER='gcc-7'
+      - Fortran_COMPILER='gfortran-7'
       - BUILD_TYPE='Release'
       - COVERAGE=OFF
       - PYTHON=3.6
-      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
-  - name : "Python 3.7 Xenial"
+      - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+  - name : "Python 3.7 Bionic"
     os: linux
     language: python
-    dist: xenial
+    dist: bionic
     python: "3.7"
     compiler: gcc
     addons: &gcc6
@@ -58,27 +37,48 @@ matrix:
         sources:
           - ubuntu-toolchain-r-test
         packages:
-          - g++-6
-          - gcc-6
+          - g++-7
+          - gcc-7
     env:
-      - CXX_COMPILER='g++-6'
-      - C_COMPILER='gcc-6'
-      - Fortran_COMPILER='gfortran-6'
+      - CXX_COMPILER='g++-7'
+      - C_COMPILER='gcc-7'
+      - Fortran_COMPILER='gfortran-7'
       - BUILD_TYPE='Release'
       - COVERAGE=OFF
       - PYTHON=3.7
-      - MATRIX_EVAL="CC=gcc-6 && CXX=g++-6"
-  - name : "Python 3.5 macOS"
+      - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+  - name : "Python 3.8 Bionic"
+    os: linux
+    language: python
+    dist: bionic
+    python: "3.8"
+    compiler: gcc
+    addons: &gcc6
+      apt:
+        sources:
+          - ubuntu-toolchain-r-test
+        packages:
+          - g++-7
+          - gcc-7
+    env:
+      - CXX_COMPILER='g++-7'
+      - C_COMPILER='gcc-7'
+      - Fortran_COMPILER='gfortran-7'
+      - BUILD_TYPE='Release'
+      - COVERAGE=OFF
+      - PYTHON=3.7
+      - MATRIX_EVAL="CC=gcc-7 && CXX=g++-7"
+  - name : "Python 3.6 macOS"
     os: osx
     osx_image: xcode10.2
     env:
-        - MATRIX_EVAL="brew install gcc6 && CC=gcc-6 && CXX=g++-6"
-        - CXX_COMPILER='g++-6'
-        - C_COMPILER='gcc-6'
-        - Fortran_COMPILER='gfortran-6'
+        - MATRIX_EVAL="brew install gcc6 && CC=gcc-7 && CXX=g++-7"
+        - CXX_COMPILER='g++-7'
+        - C_COMPILER='gcc-7'
+        - Fortran_COMPILER='gfortran-7'
         - BUILD_TYPE='Release'
         - COVERAGE=OFF
-        - PYTHON=3.7
+        - PYTHON=3.6
     language: shell
 
 
@@ -89,8 +89,9 @@ before_install:
   - eval "${MATRIX_EVAL}"
 
 install:
-  - export CC=gcc-6
-  - export CXX=g++-6
+  - export CC=gcc-7
+  - export CXX=g++-7
+  - pip3 install setuptools wheel
   - pip3 install --upgrade pip
   - pip3 install -r requirements.txt
   - python3 setup.py install
