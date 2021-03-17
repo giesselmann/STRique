@@ -7,5 +7,6 @@ scipy >= 0.17.0
 pyyaml
 h5py >= 2.7.1
 scikit-image < 0.15.0
-pomegranate == 0.10.0
+#pomegranate == 0.10.0
+git+https://github.com/jmschrei/pomegranate.git@v0.10.0
 submodules/ont_fast5_api
