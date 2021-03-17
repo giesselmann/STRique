@@ -1,4 +1,5 @@
 # exclude from build context
+Dockerfile
 .git
 *.egg-info
 **/__pycache__
