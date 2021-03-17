@@ -55,7 +55,7 @@ RUN mkdir -p /app
 COPY . /app/
 WORKDIR /app
 
-RUN wget https://bootstrap.pypa.io/get-pip.py
+RUN wget https://bootstrap.pypa.io/pip/3.5/get-pip.py
 RUN python3 get-pip.py
 RUN pip3 install -r requirements.txt
 RUN python3 setup.py install
