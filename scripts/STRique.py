@@ -243,7 +243,7 @@ class profileHMM(pg.HiddenMarkovModel):
         match_states = []
         insertion_states = []
         deletion_states = []
-        digits = np.ceil(np.log10(len(sequence) - self.pm_base.kmer + 1)).astype(np.int)
+        digits = np.ceil(np.log10(len(sequence) - self.pm_base.kmer + 1)).astype(int)
         for idx, kmer in enumerate([sequence[i:i+self.pm_base.kmer] for i in range(len(sequence) - self.pm_base.kmer + 1)]):
             state_name = self.state_prefix + str(idx).rjust(digits,'0')
             state_mean, state_std = self.pm_base.model_dict[kmer]
