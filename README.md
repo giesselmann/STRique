@@ -1,6 +1,6 @@
 # STRique
 [![Latest GitHub release](https://img.shields.io/github/release-pre/giesselmann/STRique.svg)](https://github.com/giesselmann/STRique/releases/latest)
-[![Build Status](https://travis-ci.org/giesselmann/STRique.svg?branch=master)](https://travis-ci.org/giesselmann/STRique)
+[![Build Status](https://www.travis-ci.com/giesselmann/STRique.svg?branch=master)](https://www.travis-ci.com/giesselmann/STRique)
 [![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/giesselmann/strique.svg)](https://hub.docker.com/r/giesselmann/strique/)
 [![Documentation Status](https://readthedocs.org/projects/strique/badge/?version=latest)](https://strique.readthedocs.io/en/latest/?badge=latest)
 

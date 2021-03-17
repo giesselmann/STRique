@@ -45,7 +45,7 @@ from STRique_lib import fast5Index
 if __name__ == '__main__':
     signal(SIGPIPE, SIG_DFL)
     # cmd arguments
-    parser = argparse.ArgumentParser(description="Mask region in raw nanopore fast5 file. Read stdin as tab-separated ID, ticks, offset")
+    parser = argparse.ArgumentParser(description="Mask region in raw nanopore fast5 file.")
     parser.add_argument("index", help="Path to input fast5 index")
     parser.add_argument("counts", help="Path to STRique count output file")
     parser.add_argument("output", help="Path to output .fast5 directory with masked reads")

@@ -117,7 +117,7 @@ STRique detects the repeat expansion in the raw nanopore signal. It is possible 
 ```
 python3 scripts/fast5Masker.py [OPTIONS] index counts output
 
-Mask region in raw nanopore fast5 file. Read stdin as tab-separated ID, ticks, offset
+Mask region in raw nanopore fast5 file.
 
 positional arguments:
   index                     Path to input fast5 index
