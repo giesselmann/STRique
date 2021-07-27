@@ -1,9 +1,0 @@
-[submodule "pybind11"]
-	path = submodules/pybind11
-	url = https://github.com/pybind/pybind11
-[submodule "seqan"]
-	path = submodules/seqan
-	url = https://github.com/seqan/seqan
-[submodule "ont_fast5_api"]
-	path = submodules/ont_fast5_api
-	url = https://github.com/nanoporetech/ont_fast5_api
