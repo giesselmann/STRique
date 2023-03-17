@@ -1,4 +1,8 @@
 # STRique
+
+*STRique is no longer maintained!   
+It may still work in py3.6 and py3.7 virtual environments as long as the ONT fast5 format is not changed.*
+
 [![Latest GitHub release](https://img.shields.io/github/release-pre/giesselmann/STRique.svg)](https://github.com/giesselmann/STRique/releases/latest)
 [![Build Status](https://www.travis-ci.com/giesselmann/STRique.svg?branch=master)](https://www.travis-ci.com/giesselmann/STRique)
 [![Docker Cloud Build Status](https://img.shields.io/docker/cloud/build/giesselmann/strique.svg)](https://hub.docker.com/r/giesselmann/strique/)
